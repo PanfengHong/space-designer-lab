@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: #f5f5f5;
+  color: #333;
+  /* 禁用浏览器滑动导航手势 (前进/后退) */
+  overscroll-behavior: none;
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: none;
+}
+
+/* 禁用 canvas 的默认手势 */
+canvas {
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d1d1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #b1b1b1;
+}
+
+.panel-section {
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.panel-section:last-child {
+  border-bottom: none;
+}
+
+.viewport-canvas {
+  background: #e8e8e8;
+}
+
+.btn-icon {
+  @apply w-8 h-8 flex items-center justify-center rounded-md transition-colors;
+}
+
+.btn-icon:hover {
+  @apply bg-gray-100;
+}
+
+.btn-icon.active {
+  @apply bg-gray-900 text-white;
+}
+
+.slider-track {
+  @apply w-full h-1 bg-gray-200 rounded-full appearance-none cursor-pointer;
+}
+
+.slider-track::-webkit-slider-thumb {
+  @apply appearance-none w-3 h-3 bg-gray-900 rounded-full cursor-pointer;
+}
