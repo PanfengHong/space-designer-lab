@@ -3,20 +3,22 @@ import { OrbitControls } from '@react-three/drei';
 import { Suspense, useMemo } from 'react';
 import * as THREE from 'three';
 import type { ModelItem, Furniture, SceneData } from '../../types';
-import { Bed } from '../3D/furniture/Bed';
-import { Sofa } from '../3D/furniture/Sofa';
-import { Table } from '../3D/furniture/Table';
-import { Cabinet } from '../3D/furniture/Cabinet';
-import { Chair } from '../3D/furniture/Chair';
-import { Refrigerator } from '../3D/furniture/Refrigerator';
-import { WashingMachine } from '../3D/furniture/WashingMachine';
-import { Toilet } from '../3D/furniture/Toilet';
-import { Sink } from '../3D/furniture/Sink';
-import { Shower } from '../3D/furniture/Shower';
-import { Stove } from '../3D/furniture/Stove';
-import { Appliance } from '../3D/furniture/Appliance';
-import { Decor } from '../3D/furniture/Decor';
+import { Bed } from '../3D/indoor/furniture/Bed';
+import { Sofa } from '../3D/indoor/furniture/Sofa';
+import { Table } from '../3D/indoor/furniture/Table';
+import { Cabinet } from '../3D/indoor/furniture/Cabinet';
+import { Chair } from '../3D/indoor/furniture/Chair';
+import { Refrigerator } from '../3D/indoor/furniture/Refrigerator';
+import { WashingMachine } from '../3D/indoor/furniture/WashingMachine';
+import { Toilet } from '../3D/indoor/furniture/Toilet';
+import { Sink } from '../3D/indoor/furniture/Sink';
+import { Shower } from '../3D/indoor/furniture/Shower';
+import { Stove } from '../3D/indoor/furniture/Stove';
+import { Appliance } from '../3D/indoor/furniture/Appliance';
+import { Decor } from '../3D/indoor/furniture/Decor';
 import { mockSceneData, oneBedroomScene, twoBedroomScene, modernApartmentScene } from '../../data/mockScene';
+import { getOutdoorSceneForModel } from '../../data/outdoorScene';
+import type { GroundItem, OutdoorObject, OutdoorSceneData } from '../../types';
 
 function renderFurniture(data: Furniture) {
   switch (data.type) {
@@ -177,15 +179,94 @@ function ApartmentPreview({ item }: { item: ModelItem }) {
   );
 }
 
+/** 园区预览 — 用轻量体块表现地面层与空间层 (蓝白数字园区风) */
+function CampusPreview({ item }: { item: ModelItem }) {
+  const scene: OutdoorSceneData = useMemo(() => getOutdoorSceneForModel(item), [item]);
+
+  const groundColor = (g: GroundItem) => {
+    switch (g.type) {
+      case 'river': return '#9ccdee';
+      case 'grass': return '#cfe9cd';
+      case 'road': return g.position[1] > 0.5 ? '#b8c2cd' : '#c2cad4';
+      case 'intersection': return '#c2cad4';
+      case 'ramp': return '#b8c2cd';
+      default: return g.color || '#f2f5f9';
+    }
+  };
+
+  const objectColor = (o: OutdoorObject) => {
+    switch (o.type) {
+      case 'building': return '#8fc4ee';
+      case 'warehouse': return '#eef2f7';
+      case 'truck': return '#7fb0e2';
+      case 'car': return '#ffffff';
+      default: return o.color;
+    }
+  };
+
+  return (
+    <>
+      <ambientLight intensity={0.75} />
+      <directionalLight position={[40, 60, 30]} intensity={0.7} />
+      <directionalLight position={[-30, 30, -20]} intensity={0.25} color="#c8daf0" />
+      <hemisphereLight args={['#dceaf6', '#e4eadf', 0.45]} />
+
+      {/* 地面结构层: 地面 → 河流 → 草地 → 道路 → 路口 → 匝道 */}
+      {(['ground', 'river', 'grass', 'road', 'intersection', 'ramp'] as GroundItem['type'][]).flatMap((type) =>
+        scene.ground.filter((g) => g.type === type).map((g) => (
+          <group
+            key={g.id}
+            position={g.position}
+            rotation={[0, (g.rotation * Math.PI) / 180, 0]}
+          >
+            <mesh castShadow receiveShadow>
+              <boxGeometry args={g.size} />
+              <meshStandardMaterial color={groundColor(g)} roughness={0.85} />
+            </mesh>
+            {g.type === 'road' && (
+              <mesh position={[0, g.size[1] / 2 + 0.006, 0]}>
+                <boxGeometry args={[g.size[0] * 0.96, 0.012, 0.05]} />
+                <meshStandardMaterial color="#ffffff" />
+              </mesh>
+            )}
+          </group>
+        ))
+      )}
+
+      {/* 空间设计层: 建筑/车辆体块 */}
+      {scene.objects.map((o) => (
+        <group
+          key={o.id}
+          position={o.position}
+          rotation={[0, (o.rotation * Math.PI) / 180, 0]}
+        >
+          <mesh castShadow receiveShadow>
+            <boxGeometry args={o.size} />
+            <meshStandardMaterial
+              color={objectColor(o)}
+              roughness={o.type === 'building' ? 0.25 : 0.7}
+              metalness={o.type === 'building' ? 0.2 : 0}
+            />
+          </mesh>
+        </group>
+      ))}
+    </>
+  );
+}
+
 export function ModelThumbnail({ item }: { item: ModelItem }) {
   // 根据家具尺寸计算相机距离 (留出余量, 确保完整显示)
-  const camDist = item.category === 'furniture'
-    ? Math.max(...(item.size ?? [1, 1, 1]), 1) * 1.8 + 1.2
-    : 7;
+  const camDist =
+    item.category === 'furniture'
+      ? Math.max(...(item.size ?? [1, 1, 1]), 1) * 1.8 + 1.2
+      : item.category === 'campus'
+        ? 120
+        : 7;
 
   // 户型相机 target
   const target = useMemo(() => {
     if (item.category === 'furniture') return [0, 0, 0] as [number, number, number];
+    if (item.category === 'campus') return [0, 2, 0] as [number, number, number];
     // 户型: 从 mockScene 提取中心
     let scene: SceneData;
     switch (item.type) {
@@ -216,7 +297,9 @@ export function ModelThumbnail({ item }: { item: ModelItem }) {
       <Suspense fallback={null}>
         {item.category === 'furniture'
           ? <FurniturePreview item={item} />
-          : <ApartmentPreview item={item} />}
+          : item.category === 'campus'
+            ? <CampusPreview item={item} />
+            : <ApartmentPreview item={item} />}
         <OrbitControls
           enablePan={false}
           enableZoom={false}

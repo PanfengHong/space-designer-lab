@@ -3,18 +3,18 @@ import { OrbitControls } from '@react-three/drei';
 import { Suspense, useMemo } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import type { Furniture } from '../../types';
-import { Bed } from '../3D/furniture/Bed';
-import { Sofa } from '../3D/furniture/Sofa';
-import { Table } from '../3D/furniture/Table';
-import { Cabinet } from '../3D/furniture/Cabinet';
-import { Chair } from '../3D/furniture/Chair';
-import { Refrigerator } from '../3D/furniture/Refrigerator';
-import { WashingMachine } from '../3D/furniture/WashingMachine';
-import { Toilet } from '../3D/furniture/Toilet';
-import { Sink } from '../3D/furniture/Sink';
-import { Shower } from '../3D/furniture/Shower';
-import { Stove } from '../3D/furniture/Stove';
-import { Decor } from '../3D/furniture/Decor';
+import { Bed } from '../3D/indoor/furniture/Bed';
+import { Sofa } from '../3D/indoor/furniture/Sofa';
+import { Table } from '../3D/indoor/furniture/Table';
+import { Cabinet } from '../3D/indoor/furniture/Cabinet';
+import { Chair } from '../3D/indoor/furniture/Chair';
+import { Refrigerator } from '../3D/indoor/furniture/Refrigerator';
+import { WashingMachine } from '../3D/indoor/furniture/WashingMachine';
+import { Toilet } from '../3D/indoor/furniture/Toilet';
+import { Sink } from '../3D/indoor/furniture/Sink';
+import { Shower } from '../3D/indoor/furniture/Shower';
+import { Stove } from '../3D/indoor/furniture/Stove';
+import { Decor } from '../3D/indoor/furniture/Decor';
 
 /**
  * 家具素材库 — 2 列网格 + 3D 缩略图

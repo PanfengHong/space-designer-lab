@@ -9,8 +9,13 @@ import type {
   ViewSettings,
   ModelItem,
   Furniture,
+  DesignerMode,
+  OutdoorSceneData,
+  GroundItem,
+  OutdoorObject,
 } from '../types';
 import { mockSceneData, getSceneForModel } from '../data/mockScene';
+import { demoOutdoorScene, getOutdoorSceneForModel } from '../data/outdoorScene';
 
 interface AppState {
   // 空间列表 (从当前 sceneData.rooms 动态拼装)
@@ -18,7 +23,11 @@ interface AppState {
   selectSpace: (id: string) => void;
   activeSpaceId: string | null;
 
-  // 模型层级
+  // 设计器模式 (室内 / 户外)
+  designerMode: DesignerMode;
+  setDesignerMode: (mode: DesignerMode) => void;
+
+  // 模型层级 (室内: building/interior; 户外: ground/space)
   layers: ModelLayer[];
   toggleLayer: (id: string) => void;
 
@@ -112,6 +121,50 @@ interface AppState {
   // 更新建筑结构 (门/窗/飘窗/落地窗/墙)
   // selector 格式: "wall:<roomId>:<id>" / "door:<roomId>:<id>" / "window:<roomId>:<id>" / "bay:<roomId>:<id>" / "french:<roomId>:<id>"
   updateStructure: (selector: string, patch: Record<string, unknown>) => void;
+
+  // ===== 户外空间设计 =====
+  // 户外场景数据 (地面结构层 + 空间设计层)
+  outdoorSceneData: OutdoorSceneData;
+  setOutdoorSceneData: (scene: OutdoorSceneData) => void;
+
+  // 选中的地面元素 / 空间对象
+  selectedGroundId: string | null;
+  selectGround: (id: string | null) => void;
+  selectedOutdoorObjectId: string | null;
+  selectOutdoorObject: (id: string | null) => void;
+
+  // 地面元素 CRUD
+  addGroundItem: (item: GroundItem) => void;
+  updateGroundItem: (id: string, patch: Partial<GroundItem>) => void;
+  removeGroundItem: (id: string) => void;
+
+  // 空间对象 CRUD
+  addOutdoorObject: (item: OutdoorObject) => void;
+  updateOutdoorObject: (id: string, patch: Partial<OutdoorObject>) => void;
+  removeOutdoorObject: (id: string) => void;
+
+  // 拖拽中的户外素材模板
+  draggingOutdoor: {
+    kind: 'ground' | 'object';
+    type: string;
+    name: string;
+    size: [number, number, number];
+    color: string;
+  } | null;
+  setDraggingOutdoor: (f: {
+    kind: 'ground' | 'object';
+    type: string;
+    name: string;
+    size: [number, number, number];
+    color: string;
+  } | null) => void;
+  // 拖拽预览位置
+  outdoorDragGhostPos: [number, number] | null;
+  setOutdoorDragGhostPos: (pos: [number, number] | null) => void;
+
+  // 设置当前园区模型 (切换户外场景)
+  activeCampusItem: ModelItem | null;
+  setActiveCampus: (model: ModelItem | null) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -130,6 +183,34 @@ export const useAppStore = create<AppState>((set) => ({
       selectedStructureId: null,
     }),
 
+  designerMode: 'interior',
+  // 切换设计器模式: 替换模型分层、重置风格、清空选中
+  setDesignerMode: (mode) =>
+    set(() => {
+      if (mode === 'outdoor') {
+        return {
+          designerMode: 'outdoor',
+          layers: [
+            { id: 'ground', name: '地面结构层', locked: true },
+            { id: 'space', name: '空间设计层', locked: true },
+          ],
+          designStyleId: 'park1',
+          selectedGroundId: null,
+          selectedOutdoorObjectId: null,
+        };
+      }
+      return {
+        designerMode: 'interior',
+        layers: [
+          { id: 'building', name: '建筑结构层', locked: true },
+          { id: 'interior', name: '室内设计层', locked: true },
+        ],
+        designStyleId: 'base',
+        selectedStructureId: null,
+        selectedFurnitureId: null,
+      };
+    }),
+
   layers: [
     { id: 'building', name: '建筑结构层', locked: true },
     { id: 'interior', name: '室内设计层', locked: true },
@@ -145,6 +226,8 @@ export const useAppStore = create<AppState>((set) => ({
         // 锁定时清空对应层的选中
         ...(willLock && id === 'building' ? { selectedStructureId: null } : {}),
         ...(willLock && id === 'interior' ? { selectedFurnitureId: null } : {}),
+        ...(willLock && id === 'ground' ? { selectedGroundId: null } : {}),
+        ...(willLock && id === 'space' ? { selectedOutdoorObjectId: null } : {}),
       };
     }),
 
@@ -189,6 +272,7 @@ export const useAppStore = create<AppState>((set) => ({
     showDoorsOpen: false,
     wallCutHeight: 2.5,
     lighting: '自然光照',
+    showLabels: false,
   },
   updateViewSettings: (key, value) =>
     set((state) => ({
@@ -381,5 +465,104 @@ export const useAppStore = create<AppState>((set) => ({
         },
       };
     }),
+
+  // ===== 户外空间设计状态 =====
+  outdoorSceneData: demoOutdoorScene,
+  setOutdoorSceneData: (scene) =>
+    set({
+      outdoorSceneData: scene,
+      selectedGroundId: null,
+      selectedOutdoorObjectId: null,
+    }),
+
+  selectedGroundId: null,
+  selectGround: (id) =>
+    set((state) => ({
+      selectedGroundId: id,
+      selectedOutdoorObjectId: id ? null : state.selectedOutdoorObjectId,
+    })),
+
+  selectedOutdoorObjectId: null,
+  selectOutdoorObject: (id) =>
+    set((state) => ({
+      selectedOutdoorObjectId: id,
+      selectedGroundId: id ? null : state.selectedGroundId,
+    })),
+
+  addGroundItem: (item) =>
+    set((state) => ({
+      outdoorSceneData: {
+        ...state.outdoorSceneData,
+        ground: [...state.outdoorSceneData.ground, item],
+      },
+      selectedGroundId: item.id,
+      selectedOutdoorObjectId: null,
+    })),
+
+  updateGroundItem: (id, patch) =>
+    set((state) => ({
+      outdoorSceneData: {
+        ...state.outdoorSceneData,
+        ground: state.outdoorSceneData.ground.map((g) =>
+          g.id === id ? { ...g, ...patch } : g
+        ),
+      },
+    })),
+
+  removeGroundItem: (id) =>
+    set((state) => ({
+      outdoorSceneData: {
+        ...state.outdoorSceneData,
+        ground: state.outdoorSceneData.ground.filter((g) => g.id !== id),
+      },
+      selectedGroundId: state.selectedGroundId === id ? null : state.selectedGroundId,
+    })),
+
+  addOutdoorObject: (item) =>
+    set((state) => ({
+      outdoorSceneData: {
+        ...state.outdoorSceneData,
+        objects: [...state.outdoorSceneData.objects, item],
+      },
+      selectedOutdoorObjectId: item.id,
+      selectedGroundId: null,
+    })),
+
+  updateOutdoorObject: (id, patch) =>
+    set((state) => ({
+      outdoorSceneData: {
+        ...state.outdoorSceneData,
+        objects: state.outdoorSceneData.objects.map((o) =>
+          o.id === id ? { ...o, ...patch } : o
+        ),
+      },
+    })),
+
+  removeOutdoorObject: (id) =>
+    set((state) => ({
+      outdoorSceneData: {
+        ...state.outdoorSceneData,
+        objects: state.outdoorSceneData.objects.filter((o) => o.id !== id),
+      },
+      selectedOutdoorObjectId:
+        state.selectedOutdoorObjectId === id ? null : state.selectedOutdoorObjectId,
+    })),
+
+  draggingOutdoor: null,
+  setDraggingOutdoor: (f) => set({ draggingOutdoor: f }),
+
+  outdoorDragGhostPos: null,
+  setOutdoorDragGhostPos: (pos) => set({ outdoorDragGhostPos: pos }),
+
+  activeCampusItem: null,
+  setActiveCampus: (model) => {
+    const scene = getOutdoorSceneForModel(model);
+    set({
+      activeCampusItem: model,
+      outdoorSceneData: scene,
+      selectedGroundId: null,
+      selectedOutdoorObjectId: null,
+    });
+  },
 }));
 

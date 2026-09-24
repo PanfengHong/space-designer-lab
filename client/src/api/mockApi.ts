@@ -42,8 +42,14 @@ function seedData(): ModelItem[] {
     { id: 'm-apt-modern', name: '现代三居', category: 'apartment', type: 'modern', tags: ['三居', '衣帽间', '开放客餐厅'] },
   ];
 
+  const campuses: Omit<ModelItem, 'createdAt' | 'updatedAt'>[] = [
+    { id: 'm-campus-demo', name: '数字产业园区', category: 'campus', type: 'digital-park', tags: ['园区', '数字', '物流'] },
+    { id: 'm-campus-logistics', name: '智慧物流园', category: 'campus', type: 'logistics', tags: ['物流', '仓储', '高架'] },
+    { id: 'm-campus-rd', name: '科创研发园', category: 'campus', type: 'industrial-park', tags: ['研发', '厂房', '办公'] },
+  ];
+
   const ts = now();
-  return [...furniture, ...apartments].map((m) => ({
+  return [...furniture, ...apartments, ...campuses].map((m) => ({
     ...m,
     createdAt: ts,
     updatedAt: ts,
@@ -59,10 +65,10 @@ function loadFromStorage(): ModelItem[] {
       return seed;
     }
     const stored: ModelItem[] = JSON.parse(raw);
-    // 自动补全种子户型 (确保新增的户型卡片对老用户可见)
-    const seedApartments = seedData().filter((m) => m.category === 'apartment');
+    // 自动补全种子模型 (户型/园区, 确保新增卡片对老用户可见)
+    const seedTemplates = seedData().filter((m) => m.category !== 'furniture');
     const storedIds = new Set(stored.map((m) => m.id));
-    const missing = seedApartments.filter((m) => !storedIds.has(m.id));
+    const missing = seedTemplates.filter((m) => !storedIds.has(m.id));
     if (missing.length > 0) {
       stored.push(...missing);
       saveToStorage(stored);

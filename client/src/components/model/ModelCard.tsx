@@ -14,6 +14,8 @@ const TYPE_LABELS: Record<string, string> = {
   fridge: '冰箱', washer: '洗衣机', toilet: '马桶', sink: '洗手台',
   shower: '淋浴', appliance: '家电', decor: '装饰',
   'one-bed': '一居', 'two-bed': '两居', 'three-bed': '三居', 'modern': '现代三居',
+  'digital-park': '数字园区', 'industrial-park': '工业园区',
+  logistics: '物流园区', 'office-park': '办公园区',
 };
 
 export function ModelCard({ item, onEdit, onDelete, onEnter }: ModelCardProps) {

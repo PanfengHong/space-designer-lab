@@ -28,7 +28,7 @@ export function Login() {
     setTimeout(() => {
       setLoading(false);
       login(username.trim());
-      navigate('/models');
+      navigate('/home');
     }, 600);
   };
 

@@ -175,10 +175,53 @@ export interface ViewSettings {
   showDoorsOpen: boolean;
   wallCutHeight: number;
   lighting: string;
+  showLabels?: boolean; // 户外模式: 显示元素名称标签
 }
 
 // 模型分类
-export type ModelCategory = 'furniture' | 'apartment';
+export type ModelCategory = 'furniture' | 'apartment' | 'campus';
+
+// 设计器模式: 室内户型设计 / 户外空间设计
+export type DesignerMode = 'interior' | 'outdoor';
+
+// ===== 户外空间设计类型 =====
+
+// 地面结构层元素类型: 地面 / 草地 / 河流 / 道路 / 十字路口 / 高架匝道
+export type GroundItemType = 'ground' | 'grass' | 'river' | 'road' | 'intersection' | 'ramp';
+
+// 空间设计层对象类型: 玻璃建筑 / 厂房仓库 / 轿车 / 卡车
+export type OutdoorObjectType = 'building' | 'warehouse' | 'car' | 'truck';
+
+// 户外元素公共字段
+// position: 元素中心点 [x, y, z]; size: [X向长度, 高度/厚度, Z向宽度]
+// rotation: 绕 Y 轴旋转角度 (度)
+export interface OutdoorItemBase {
+  id: string;
+  name: string;
+  position: [number, number, number];
+  rotation: number;
+  size: [number, number, number];
+  color: string;
+}
+
+// 地面结构层元素
+export interface GroundItem extends OutdoorItemBase {
+  type: GroundItemType;
+  branches?: 2 | 3 | 4;   // 路口分支数: 2=T 字岔口(3 路相交), 3=T 字, 4=十字 (默认 4)
+  arcRadius?: number;     // 转向圆弧半径 (默认 1.5), 仅 intersection 使用
+  lanes?: 2 | 4;          // 车道数: 2=双向 2 车道(默认, 中央单虚线), 4=双向 4 车道(中央双实线+车道虚线), 仅 road 使用
+}
+
+// 空间设计层对象 (车辆/建筑)
+export interface OutdoorObject extends OutdoorItemBase {
+  type: OutdoorObjectType;
+}
+
+// 户外场景数据
+export interface OutdoorSceneData {
+  ground: GroundItem[];
+  objects: OutdoorObject[];
+}
 
 // 模型卡片数据
 export interface ModelItem {

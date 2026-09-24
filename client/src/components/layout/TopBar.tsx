@@ -3,6 +3,8 @@ import { useAppStore } from '../../store/useAppStore';
 
 export function TopBar() {
   const currentUser = useAppStore((s) => s.currentUser);
+  const designerMode = useAppStore((s) => s.designerMode);
+  const modeLabel = designerMode === 'outdoor' ? '户外空间设计' : '室内户型设计';
 
   return (
     <div className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 select-none">
@@ -20,6 +22,11 @@ export function TopBar() {
             <span className="font-bold text-gray-900 text-sm tracking-wide">BASE</span>
             <span className="text-gray-300">|</span>
             <span className="text-gray-900 text-sm font-medium">空间设计实验室</span>
+            <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+              designerMode === 'outdoor' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-600'
+            }`}>
+              {modeLabel}
+            </span>
           </div>
           <div className="text-[10px] text-gray-400 tracking-widest uppercase">Interactive Spatial Design</div>
         </div>

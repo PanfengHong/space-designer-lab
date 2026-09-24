@@ -32,6 +32,13 @@ const APARTMENT_TYPES = [
   { value: 'modern', label: '现代三居' },
 ];
 
+const CAMPUS_TYPES = [
+  { value: 'digital-park', label: '数字园区' },
+  { value: 'industrial-park', label: '工业园区' },
+  { value: 'logistics', label: '物流园区' },
+  { value: 'office-park', label: '办公园区' },
+];
+
 const COLOR_PRESETS = [
   '#e8e0d4', '#d4c5b0', '#c8b8a0', '#a08060',
   '#8b7355', '#5c4033', '#3d3d3d', '#1a1a1a',
@@ -40,7 +47,11 @@ const COLOR_PRESETS = [
 
 export function ModelForm({ item, category, onSave, onClose }: ModelFormProps) {
   const isEdit = !!item;
-  const types = category === 'furniture' ? FURNITURE_TYPES : APARTMENT_TYPES;
+  const types =
+    category === 'furniture' ? FURNITURE_TYPES
+    : category === 'campus' ? CAMPUS_TYPES
+    : APARTMENT_TYPES;
+  const categoryLabel = category === 'furniture' ? '家具模型' : category === 'campus' ? '园区模板' : '户型模板';
 
   const [name, setName] = useState('');
   const [type, setType] = useState('');
@@ -93,7 +104,7 @@ export function ModelForm({ item, category, onSave, onClose }: ModelFormProps) {
           <h2 className="text-sm font-semibold text-gray-900">
             {isEdit ? '编辑模型' : '新增模型'}
             <span className="ml-2 text-xs text-gray-400 font-normal">
-              {category === 'furniture' ? '家具模型' : '户型模板'}
+              {categoryLabel}
             </span>
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">

@@ -1,7 +1,7 @@
 import { RotateCcw, Maximize2, Minimize2, ChevronDown, Sun, SlidersHorizontal, Eye, Box, Grid3X3, LayoutGrid, Play, Download, X, Layers } from 'lucide-react';
 import { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
-import { Scene } from '../3D/Scene';
+import { Scene } from '../3D/indoor/Scene';
 import { FloorPlan2D } from '../2D/FloorPlan2D';
 import { LIGHTING_OPTIONS, LIGHTING_ICONS } from '../../constants/lighting';
 import type { Furniture } from '../../types';
