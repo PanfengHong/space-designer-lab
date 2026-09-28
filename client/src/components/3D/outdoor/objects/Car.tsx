@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { useMemo } from 'react'
-import { OutdoorPalette } from '../../../../constants/outdoorStyles';
 import type { OutdoorObject } from '../../../../types';
+import type { OutdoorPalette } from '../../../../constants/outdoorStyles';
 
 /* ================================ 常量 ================================ */
 

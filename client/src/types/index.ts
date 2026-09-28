@@ -186,11 +186,11 @@ export type DesignerMode = 'interior' | 'outdoor';
 
 // ===== 户外空间设计类型 =====
 
-// 地面结构层元素类型: 地面 / 草地 / 河流 / 道路 / 十字路口 / 高架匝道
-export type GroundItemType = 'ground' | 'grass' | 'river' | 'road' | 'intersection' | 'ramp';
+// 地面结构层元素类型: 地面 / 草地 / 河流 / 道路 / 十字路口 / 高架匝道 / 围墙 / 操场
+export type GroundItemType = 'ground' | 'grass' | 'river' | 'road' | 'intersection' | 'ramp' | 'fence' | 'playground';
 
-// 空间设计层对象类型: 玻璃建筑 / 厂房仓库 / 轿车 / 卡车
-export type OutdoorObjectType = 'building' | 'warehouse' | 'car' | 'truck';
+// 空间设计层对象类型: 玻璃建筑 / 厂房仓库 / 教学楼 / 实验楼 / 宿舍楼 / 园区大门 / 门卫室 / 轿车 / 卡车 / 树
+export type OutdoorObjectType = 'building' | 'warehouse' | 'teaching-building' | 'lab-building' | 'dormitory' | 'gate' | 'guard-booth' | 'car' | 'truck' | 'tree';
 
 // 户外元素公共字段
 // position: 元素中心点 [x, y, z]; size: [X向长度, 高度/厚度, Z向宽度]

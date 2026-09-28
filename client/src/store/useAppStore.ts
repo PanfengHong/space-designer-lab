@@ -16,6 +16,7 @@ import type {
 } from '../types';
 import { mockSceneData, getSceneForModel } from '../data/mockScene';
 import { demoOutdoorScene, getOutdoorSceneForModel } from '../data/outdoorScene';
+import { saveSceneForModel, loadSceneForModel } from '../api/mockApi';
 
 interface AppState {
   // 空间列表 (从当前 sceneData.rooms 动态拼装)
@@ -165,9 +166,17 @@ interface AppState {
   // 设置当前园区模型 (切换户外场景)
   activeCampusItem: ModelItem | null;
   setActiveCampus: (model: ModelItem | null) => void;
+
+  // ===== 保存状态 =====
+  // 是否有未保存的修改
+  isDirty: boolean;
+  // 标记脏状态 (场景数据被修改时调用)
+  markDirty: () => void;
+  // 保存当前场景 (室内 sceneData / 户外 outdoorSceneData) 到 localStorage
+  saveCurrentScene: () => Promise<boolean>;
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   // 从 mockSceneData.rooms 动态拼装, 保持原有数组顺序作为 order
   spaces: mockSceneData.rooms.map((r, i) => ({ id: r.id, name: r.name, order: i + 1 })),
   activeSpaceId: null,
@@ -332,6 +341,7 @@ export const useAppStore = create<AppState>((set) => ({
   activeModelItem: null,
   setActiveModelId: (id) => set({ activeModelId: id }),
   // 设置当前模型: 更新 modelId/item, 并根据模型类别切换 sceneData
+  // 若该模型已有保存的场景数据, 优先加载保存数据
   setActiveModel: (model) => {
     if (!model) {
       set({
@@ -342,10 +352,12 @@ export const useAppStore = create<AppState>((set) => ({
         activeSpaceId: null,
         selectedFurnitureId: null,
         selectedStructureId: null,
+        isDirty: false,
       });
       return;
     }
-    const scene = getSceneForModel(model);
+    const saved = loadSceneForModel(model.id) as SceneData | null;
+    const scene = saved ?? getSceneForModel(model);
     set({
       activeModelId: model.id,
       activeModelItem: model,
@@ -354,6 +366,7 @@ export const useAppStore = create<AppState>((set) => ({
       activeSpaceId: null,
       selectedFurnitureId: null,
       selectedStructureId: null,
+      isDirty: false,
     });
   },
 
@@ -375,6 +388,7 @@ export const useAppStore = create<AppState>((set) => ({
       },
       selectedFurnitureId: furniture.id,
       selectedStructureId: null,
+      isDirty: true,
     })),
 
   // 从场景中删除家具
@@ -388,6 +402,7 @@ export const useAppStore = create<AppState>((set) => ({
         })),
       },
       selectedFurnitureId: state.selectedFurnitureId === furnitureId ? null : state.selectedFurnitureId,
+      isDirty: true,
     })),
 
   // 更新家具位置/旋转/尺寸等
@@ -402,6 +417,7 @@ export const useAppStore = create<AppState>((set) => ({
           ),
         })),
       },
+      isDirty: true,
     })),
 
   // 更新建筑结构 (门/窗/飘窗/落地窗/墙)
@@ -423,6 +439,7 @@ export const useAppStore = create<AppState>((set) => ({
             floorThickness,
             ceilingHeight,
           },
+          isDirty: true,
         };
       }
       return {
@@ -463,6 +480,7 @@ export const useAppStore = create<AppState>((set) => ({
             return r;
           }),
         },
+        isDirty: true,
       };
     }),
 
@@ -497,6 +515,7 @@ export const useAppStore = create<AppState>((set) => ({
       },
       selectedGroundId: item.id,
       selectedOutdoorObjectId: null,
+      isDirty: true,
     })),
 
   updateGroundItem: (id, patch) =>
@@ -507,6 +526,7 @@ export const useAppStore = create<AppState>((set) => ({
           g.id === id ? { ...g, ...patch } : g
         ),
       },
+      isDirty: true,
     })),
 
   removeGroundItem: (id) =>
@@ -516,6 +536,7 @@ export const useAppStore = create<AppState>((set) => ({
         ground: state.outdoorSceneData.ground.filter((g) => g.id !== id),
       },
       selectedGroundId: state.selectedGroundId === id ? null : state.selectedGroundId,
+      isDirty: true,
     })),
 
   addOutdoorObject: (item) =>
@@ -526,6 +547,7 @@ export const useAppStore = create<AppState>((set) => ({
       },
       selectedOutdoorObjectId: item.id,
       selectedGroundId: null,
+      isDirty: true,
     })),
 
   updateOutdoorObject: (id, patch) =>
@@ -536,6 +558,7 @@ export const useAppStore = create<AppState>((set) => ({
           o.id === id ? { ...o, ...patch } : o
         ),
       },
+      isDirty: true,
     })),
 
   removeOutdoorObject: (id) =>
@@ -546,6 +569,7 @@ export const useAppStore = create<AppState>((set) => ({
       },
       selectedOutdoorObjectId:
         state.selectedOutdoorObjectId === id ? null : state.selectedOutdoorObjectId,
+      isDirty: true,
     })),
 
   draggingOutdoor: null,
@@ -556,13 +580,31 @@ export const useAppStore = create<AppState>((set) => ({
 
   activeCampusItem: null,
   setActiveCampus: (model) => {
-    const scene = getOutdoorSceneForModel(model);
+    const saved = model ? (loadSceneForModel(model.id) as OutdoorSceneData | null) : null;
+    const scene = saved ?? getOutdoorSceneForModel(model);
     set({
       activeCampusItem: model,
       outdoorSceneData: scene,
       selectedGroundId: null,
       selectedOutdoorObjectId: null,
+      isDirty: false,
     });
+  },
+
+  // ===== 保存状态 =====
+  isDirty: false,
+  markDirty: () => set({ isDirty: true }),
+  saveCurrentScene: async () => {
+    const state = get();
+    // 根据当前设计器模式选择对应的模型 ID 与场景数据
+    const modelId =
+      state.designerMode === 'outdoor' ? state.activeCampusItem?.id : state.activeModelId;
+    if (!modelId) return false;
+    const sceneData =
+      state.designerMode === 'outdoor' ? state.outdoorSceneData : state.sceneData;
+    saveSceneForModel(modelId, sceneData);
+    set({ isDirty: false });
+    return true;
   },
 }));
 

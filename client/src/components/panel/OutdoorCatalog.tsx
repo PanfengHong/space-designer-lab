@@ -2,7 +2,7 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Suspense, useMemo } from 'react';
 import { useAppStore } from '../../store/useAppStore';
-import { OutdoorThumbnailContent } from '../3D/OutdoorScene';
+import { OutdoorThumbnailContent } from '../3D/outdoor/OutdoorScene';
 import type { GroundItem, OutdoorObject } from '../../types';
 
 /**
@@ -26,13 +26,21 @@ export const GROUND_CATALOG: CatalogEntry[] = [
   { kind: 'ground', type: 'intersection', name: '十字路口', size: [4, 0.18, 4], color: '#d3dae3', branches: 4, arcRadius: 1.5 } as any,
   { kind: 'ground', type: 'intersection', name: '三岔路口', size: [4, 0.18, 4], color: '#d3dae3', branches: 3, arcRadius: 1.5 } as any,
   { kind: 'ground', type: 'ramp', name: '高架匝道', size: [12, 0.22, 2.6], color: '#d3dae3' },
+  { kind: 'ground', type: 'fence', name: '围墙', size: [10, 1.8, 0.4], color: '#f0f4f8' },
+  { kind: 'ground', type: 'playground', name: '操场', size: [16, 0.2, 9], color: '#d93636' },
 ];
 
 export const OBJECT_CATALOG: CatalogEntry[] = [
   { kind: 'object', type: 'building', name: '玻璃大厦', size: [5, 7, 5], color: '#7db8e8' },
   { kind: 'object', type: 'warehouse', name: '厂房仓库', size: [7, 4, 4.5], color: '#f2f5f9' },
+  { kind: 'object', type: 'teaching-building', name: '教学楼', size: [12, 12, 6], color: '#f0f4f8' },
+  { kind: 'object', type: 'lab-building', name: '实验楼', size: [10, 10, 5], color: '#e2e8f0' },
+  { kind: 'object', type: 'dormitory', name: '宿舍楼', size: [14, 9, 5], color: '#f8fafc' },
+  { kind: 'object', type: 'gate', name: '园区大门', size: [9, 4.5, 1.2], color: '#e8eef4' },
+  { kind: 'object', type: 'guard-booth', name: '门卫室', size: [4, 3.2, 3], color: '#e8eef4' },
   { kind: 'object', type: 'truck', name: '卡车', size: [2.6, 0.75, 0.7], color: '#4a90d9' },
   { kind: 'object', type: 'car', name: '轿车', size: [1.5, 0.45, 0.7], color: '#ffffff' },
+  { kind: 'object', type: 'tree', name: '树木', size: [3.2, 6, 3.2], color: '#bfe3c0' },
 ];
 
 function CatalogThumbnail({ entry }: { entry: CatalogEntry }) {

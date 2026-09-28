@@ -814,7 +814,7 @@ export const modernApartmentScene: SceneData = {
       tags: ['三居', '主卧'],
       floorHeight: 0,
       walls: [
-        { id: 'w-mn', start: [0, 5.4], end: [5, 5.4], height: 2.8 }, // 北墙
+        { id: 'w-mn', start: [3.65, 5.4], end: [5, 5.4], height: 2.8 }, // 北墙
         { id: 'w-mw', start: [0, 5.5], end: [0, 12], height: 2.8 }, // 西墙 (落地窗)
         { id: 'w-ms', start: [0, 12], end: [5, 12], height: 2.8, cutout: { start: 1.0, end: 3.5, sill: 0.9, top: 2.2 } }, // 南墙 (窗)
         { id: 'w-me', start: [5, 5.5], end: [5, 12], height: 2.8 }, // 东墙

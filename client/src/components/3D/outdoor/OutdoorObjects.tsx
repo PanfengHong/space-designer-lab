@@ -6,6 +6,10 @@ import { GlassBuilding } from './objects/GlassBuilding';
 import { Warehouse } from './objects/Warehouse';
 import { Car } from './objects/Car';
 import { Truck } from './objects/Truck';
+import { Tree } from './objects/Tree';
+import { SchoolBuilding } from './objects/SchoolBuilding';
+import { Gate } from './objects/Gate';
+import { GuardBooth } from './objects/GuardBooth';
 
 /** 空间对象本体 (无外层定位, 用于场景渲染和缩略图) */
 export function OutdoorObjectContent({
@@ -24,6 +28,16 @@ export function OutdoorObjectContent({
       return <Car data={data} palette={palette} />;
     case 'truck':
       return <Truck data={data} palette={palette} />;
+    case 'tree':
+      return <Tree data={data} palette={palette} />;
+    case 'teaching-building':
+    case 'lab-building':
+    case 'dormitory':
+      return <SchoolBuilding data={data} palette={palette} />;
+    case 'gate':
+      return <Gate data={data} palette={palette} />;
+    case 'guard-booth':
+      return <GuardBooth data={data} palette={palette} />;
     default:
       return <Warehouse data={data} palette={palette} />;
   }

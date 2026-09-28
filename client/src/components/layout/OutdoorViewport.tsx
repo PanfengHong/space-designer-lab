@@ -1,7 +1,7 @@
 import { RotateCcw, Maximize2, Minimize2, ChevronDown, Sun, SlidersHorizontal, Eye, Box, Grid3X3, LayoutGrid, Play, Download, X, Layers, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
-import { OutdoorScene } from '../3D/OutdoorScene';
+import { OutdoorScene } from '../3D/outdoor/OutdoorScene';
 import { OutdoorPlan2D } from '../2D/OutdoorPlan2D';
 import { LIGHTING_OPTIONS, LIGHTING_ICONS } from '../../constants/lighting';
 import { OUTDOOR_STYLE_OPTIONS } from '../../constants/outdoorStyles';

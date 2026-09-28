@@ -11,6 +11,8 @@ import { River } from './ground/River';
 import { Grass } from './ground/Grass';
 import { Intersection } from './ground/Intersection';
 import { Ramp } from './ground/Ramp';
+import { Fence } from './ground/Fence';
+import { Playground } from './ground/Playground';
 
 extend({ RoundedBoxGeometry });
 
@@ -53,6 +55,8 @@ export function GroundItemContent({ data, palette }: ContentProps) {
     case 'road': return <Road data={data} palette={palette} />;
     case 'intersection': return <Intersection data={data} palette={palette} />;
     case 'ramp': return <Ramp data={data} palette={palette} />;
+    case 'fence': return <Fence data={data} palette={palette} />;
+    case 'playground': return <Playground data={data} palette={palette} />;
     default: return <GroundSlab data={data} palette={palette} />;
   }
 }

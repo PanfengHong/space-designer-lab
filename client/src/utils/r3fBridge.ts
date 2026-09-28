@@ -34,10 +34,15 @@ export function screenToFloor(clientX: number, clientY: number): [number, number
   if (!camera || !gl) return null;
 
   const rect = gl.domElement.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return null;
+
   // 转换为 NDC (-1 ~ 1)
   _ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
   _ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
+  // 强制更新相机矩阵, 避免 OrbitControls 移动后 matrixWorld 未同步
+  camera.updateMatrixWorld();
+  camera.updateProjectionMatrix();
   _raycaster.setFromCamera(_ndc, camera);
   // 射线与地板平面求交
   const hit = _raycaster.ray.intersectPlane(_floorPlane, _hit);

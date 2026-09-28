@@ -1,12 +1,13 @@
 import { useRef } from 'react';
-import type { GroupProps } from '@react-three/fiber';
+import type { OutdoorObject } from '../../../../types';
+import type { OutdoorPalette } from '../../../../constants/outdoorStyles';
 
 // 简易树木，无着色，纯白几何体
-export function Tree(props: GroupProps) {
+export function Tree({ data, palette }: { data: OutdoorObject; palette: OutdoorPalette }) {
   const treeRef = useRef(null);
 
   return (
-    <group ref={treeRef} {...props}>
+    <group ref={treeRef}>
       {/* 树干 圆柱 */}
       <mesh position={[0, 1.2, 0]}>
         <cylinderGeometry args={[0.22, 0.3, 2.4, 8]} />

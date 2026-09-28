@@ -29,6 +29,8 @@ const C = {
   carStroke: '#8a97a5',
   truck: '#cfe2f5',
   truckStroke: '#4a90d9',
+  tree: '#cfe9cd',
+  treeStroke: '#7fc07c',
   select: '#16a34a',
   text: '#4a627a',
 };
@@ -307,6 +309,7 @@ export function OutdoorPlan2D() {
     if (item.type === 'building') { fill = C.building; stroke = C.buildingStroke; }
     else if (item.type === 'car') { fill = C.car; stroke = C.carStroke; }
     else if (item.type === 'truck') { fill = C.truck; stroke = C.truckStroke; }
+    else if (item.type === 'tree') { fill = C.tree; stroke = C.treeStroke; }
 
     const isVehicle = item.type === 'car' || item.type === 'truck';
     const cabW = item.type === 'truck' ? w * 0.24 : 0;
@@ -337,6 +340,12 @@ export function OutdoorPlan2D() {
         )}
         {item.type === 'truck' && (
           <rect x={w / 2 - cabW} y={-d / 2} width={cabW} height={d} fill="#f2f5f9" stroke={stroke} strokeWidth={0.06} />
+        )}
+        {item.type === 'tree' && (
+          <>
+            <circle cx={0} cy={0} r={Math.min(w, d) / 2} fill={fill} stroke={stroke} strokeWidth={0.12} />
+            <circle cx={0} cy={0} r={Math.min(w, d) / 2 * 0.55} fill="none" stroke={stroke} strokeWidth={0.06} opacity={0.6} />
+          </>
         )}
         {selected && (
           <rect x={-w / 2 - 0.15} y={-d / 2 - 0.15} width={w + 0.3} height={d + 0.3}

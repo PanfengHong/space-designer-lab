@@ -1,6 +1,7 @@
-import type { ModelItem } from '../types';
+import type { ModelItem, SceneData, OutdoorSceneData } from '../types';
 
 const STORAGE_KEY = 'base_model_library';
+const SCENE_STORAGE_PREFIX = 'sd_scene_';
 
 // 延迟模拟网络请求
 function delay(ms: number) {
@@ -46,6 +47,7 @@ function seedData(): ModelItem[] {
     { id: 'm-campus-demo', name: '数字产业园区', category: 'campus', type: 'digital-park', tags: ['园区', '数字', '物流'] },
     { id: 'm-campus-logistics', name: '智慧物流园', category: 'campus', type: 'logistics', tags: ['物流', '仓储', '高架'] },
     { id: 'm-campus-rd', name: '科创研发园', category: 'campus', type: 'industrial-park', tags: ['研发', '厂房', '办公'] },
+    { id: 'm-campus-school', name: '智慧校园', category: 'campus', type: 'school', tags: ['校园', '教学', '操场'] },
   ];
 
   const ts = now();
@@ -126,5 +128,41 @@ export async function deleteModel(id: string): Promise<boolean> {
   const filtered = all.filter((m) => m.id !== id);
   if (filtered.length === all.length) return false;
   saveToStorage(filtered);
+  // 同时清除该模型保存的场景数据
+  clearSceneForModel(id);
   return true;
+}
+
+// ===== 场景数据持久化 (按模型 ID 存储) =====
+
+/**
+ * 保存某个模型的场景数据 (室内户型 / 户外园区)
+ */
+export function saveSceneForModel(modelId: string, sceneData: SceneData | OutdoorSceneData): void {
+  try {
+    localStorage.setItem(`${SCENE_STORAGE_PREFIX}${modelId}`, JSON.stringify(sceneData));
+  } catch {
+    // localStorage 可能已满, 忽略
+  }
+}
+
+/**
+ * 读取某个模型已保存的场景数据, 不存在则返回 null
+ */
+export function loadSceneForModel(modelId: string): SceneData | OutdoorSceneData | null {
+  try {
+    const raw = localStorage.getItem(`${SCENE_STORAGE_PREFIX}${modelId}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 清除某个模型已保存的场景数据
+ */
+export function clearSceneForModel(modelId: string): void {
+  try {
+    localStorage.removeItem(`${SCENE_STORAGE_PREFIX}${modelId}`);
+  } catch {}
 }

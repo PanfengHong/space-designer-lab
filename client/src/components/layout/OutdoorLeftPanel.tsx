@@ -6,9 +6,12 @@ import { OUTDOOR_STYLE_OPTIONS } from '../../constants/outdoorStyles';
 
 const GROUND_TYPE_LABEL: Record<string, string> = {
   ground: '地面', grass: '草地', river: '河流', road: '道路',
+  intersection: '路口', ramp: '匝道', fence: '围墙', playground: '操场',
 };
 const OBJECT_TYPE_LABEL: Record<string, string> = {
-  building: '玻璃建筑', warehouse: '厂房仓库', car: '轿车', truck: '卡车',
+  building: '玻璃建筑', warehouse: '厂房仓库',
+  'teaching-building': '教学楼', 'lab-building': '实验楼', dormitory: '宿舍楼',
+  gate: '园区大门', 'guard-booth': '门卫室', car: '轿车', truck: '卡车', tree: '树木',
 };
 
 export function OutdoorLeftPanel() {
