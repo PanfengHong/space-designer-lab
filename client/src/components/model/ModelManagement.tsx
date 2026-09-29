@@ -115,10 +115,11 @@ export function ModelManagement() {
           </div>
           <button
             onClick={() => navigate('/home')}
-            className="ml-2 flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-900 transition-colors"
+            title="返回工作台"
+            className="ml-3 flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
           >
-            <ArrowLeft size={12} />
-            工作台
+            <ArrowLeft size={13} />
+            返回工作台
           </button>
         </div>
 

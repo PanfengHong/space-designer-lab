@@ -182,10 +182,8 @@ export function OutdoorViewport() {
             withY
             yStep={0.1}
           />
-          <SliderRow
-            label="旋转角度"
+          <RotationControl
             value={selectedGround.rotation}
-            min={0} max={359} step={1} unit="°"
             onChange={(v) => updateGroundItem(selectedGround.id, { rotation: Math.round(v) })}
           />
           <SizeRows
@@ -217,10 +215,8 @@ export function OutdoorViewport() {
             withY
             yStep={0.1}
           />
-          <SliderRow
-            label="旋转角度"
+          <RotationControl
             value={selectedObject.rotation}
-            min={0} max={359} step={1} unit="°"
             onChange={(v) => updateOutdoorObject(selectedObject.id, { rotation: Math.round(v) })}
           />
           <SizeRows
@@ -382,6 +378,75 @@ function SizeRows({
         onChange={(v) => onChange([size[0], v, size[2]])} />
       <StepperRow label="宽" value={size[2]} step={0.1} min={0.1} max={max}
         onChange={(v) => onChange([size[0], size[1], v])} />
+    </div>
+  );
+}
+
+/**
+ * 旋转控制 (快捷角度按钮组 + 数字输入框带增减 + 滑块)
+ */
+const QUICK_ANGLES = [0, 45, 90, 180, 270];
+function RotationControl({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const norm = (v: number) => ((Math.round(v) % 360) + 360) % 360;
+  const cur = norm(value);
+  return (
+    <div className="space-y-1.5 pt-1.5 border-t border-gray-100">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-gray-400">旋转角度</span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => onChange(cur - 1)}
+            className="w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded text-xs transition-colors"
+            title="-1°"
+          >−</button>
+          <input
+            type="number"
+            value={cur}
+            min={0}
+            max={359}
+            step={1}
+            onChange={(e) => {
+              const v = parseInt(e.target.value, 10);
+              if (!isNaN(v)) onChange(norm(v));
+            }}
+            className="w-12 text-center text-[11px] text-gray-800 font-mono border border-gray-200 rounded px-1 py-0.5 focus:outline-none focus:border-gray-400"
+          />
+          <span className="text-[11px] text-gray-500">°</span>
+          <button
+            onClick={() => onChange(cur + 1)}
+            className="w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded text-xs transition-colors"
+            title="+1°"
+          >+</button>
+        </div>
+      </div>
+      <div className="flex items-center gap-1 flex-wrap">
+        {QUICK_ANGLES.map((a) => (
+          <button
+            key={a}
+            onClick={() => onChange(a)}
+            className={`px-1.5 py-0.5 text-[10px] rounded border transition-colors ${
+              cur === a
+                ? 'bg-gray-900 text-white border-gray-900'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400 hover:text-gray-900'
+            }`
+          }>{a}°</button>
+        ))}
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={359}
+        step={1}
+        value={cur}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="w-full h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-gray-900"
+      />
     </div>
   );
 }

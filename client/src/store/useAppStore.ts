@@ -375,7 +375,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   setDraggingFurniture: (f) => set({ draggingFurniture: f }),
   // 拖拽预览位置 (地板世界坐标 x, z)
   dragGhostPos: null,
-  setDragGhostPos: (pos) => set({ dragGhostPos: pos }),
+  setDragGhostPos: (pos) => {
+    const cur = get().dragGhostPos;
+    if (cur && pos && cur[0] === pos[0] && cur[1] === pos[1]) return;
+    set({ dragGhostPos: pos });
+  },
 
   // 向场景中添加家具 (放到指定房间)
   addFurniture: (roomId, furniture) =>
@@ -576,7 +580,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   setDraggingOutdoor: (f) => set({ draggingOutdoor: f }),
 
   outdoorDragGhostPos: null,
-  setOutdoorDragGhostPos: (pos) => set({ outdoorDragGhostPos: pos }),
+  setOutdoorDragGhostPos: (pos) => {
+    const cur = get().outdoorDragGhostPos;
+    if (cur && pos && cur[0] === pos[0] && cur[1] === pos[1]) return;
+    set({ outdoorDragGhostPos: pos });
+  },
 
   activeCampusItem: null,
   setActiveCampus: (model) => {

@@ -16,6 +16,10 @@ const _raycaster = new THREE.Raycaster();
 const _ndc = new THREE.Vector2();
 const _hit = new THREE.Vector3();
 
+// 缓存 canvas 的 bounding rect, 避免每次 dragover 触发布局查询 (强制重排)
+let _cachedRect: DOMRect | null = null;
+let _cachedRectTime = 0;
+
 export const r3fBridge: {
   camera: THREE.PerspectiveCamera | null;
   gl: THREE.WebGLRenderer | null;
@@ -33,18 +37,24 @@ export function screenToFloor(clientX: number, clientY: number): [number, number
   const { camera, gl } = r3fBridge;
   if (!camera || !gl) return null;
 
-  const rect = gl.domElement.getBoundingClientRect();
-  if (rect.width === 0 || rect.height === 0) return null;
+  // 拖拽期间 canvas 位置不变, 缓存 rect 100ms 避免强制重排
+  const now = performance.now();
+  if (!_cachedRect || now - _cachedRectTime > 100) {
+    _cachedRect = gl.domElement.getBoundingClientRect();
+    _cachedRectTime = now;
+    if (_cachedRect.width === 0 || _cachedRect.height === 0) {
+      _cachedRect = null;
+      return null;
+    }
+  }
+  const rect = _cachedRect;
 
   // 转换为 NDC (-1 ~ 1)
   _ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
   _ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
-  // 强制更新相机矩阵, 避免 OrbitControls 移动后 matrixWorld 未同步
-  camera.updateMatrixWorld();
-  camera.updateProjectionMatrix();
+  // 拖拽期间相机不动, 跳过矩阵更新以提升性能
   _raycaster.setFromCamera(_ndc, camera);
-  // 射线与地板平面求交
   const hit = _raycaster.ray.intersectPlane(_floorPlane, _hit);
   if (!hit) return null;
   return [_hit.x, _hit.z];

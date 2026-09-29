@@ -429,7 +429,6 @@ export function Scene() {
     draggingFurniture,
     setDraggingFurniture,
     setDragGhostPos,
-    dragGhostPos,
     addFurniture,
   } = useAppStore();
 
@@ -486,7 +485,6 @@ export function Scene() {
         background={bgColor}
         enableDrag
         dragSize={draggingFurniture?.size ?? null}
-        dragGhostPos={dragGhostPos}
         dragValidator={(x, z) => !!findRoomAt(x, z, sceneData.rooms)}
         onDragOver={handleDragOver}
         onDrop={handleDrop}

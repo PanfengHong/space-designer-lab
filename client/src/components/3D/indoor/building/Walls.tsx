@@ -1,6 +1,154 @@
+import { useState, useRef, useEffect } from 'react';
+import { useThree } from '@react-three/fiber';
 import type { WallSegment } from '../../../../types';
 import { useAppStore } from '../../../../store/useAppStore';
 import * as THREE from 'three';
+
+// 墙体端点拖拽手柄 — 选中墙体时在两端显示, 拖拽调节端点位置
+function WallEndHandle({
+  wallSeg, roomId, edge, yCenter, height, thickness,
+}: {
+  wallSeg: WallSegment; roomId: string; edge: 'start' | 'end'; yCenter: number; height: number; thickness: number;
+}) {
+  const updateStructure = useAppStore((s) => s.updateStructure);
+  const { camera, gl, raycaster, controls } = useThree() as {
+    camera: THREE.PerspectiveCamera; gl: THREE.WebGLRenderer; raycaster: THREE.Raycaster;
+    controls: { enabled: boolean } | null;
+  };
+  const [hovered, setHovered] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const ndcRef = useRef(new THREE.Vector2());
+  const planeRef = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
+  const hitRef = useRef(new THREE.Vector3());
+  const rectRef = useRef<DOMRect | null>(null);
+  const rectTimeRef = useRef(0);
+  // 记录最新 wallSeg, 避免 useEffect 重绑定 listener
+  const segRef = useRef(wallSeg);
+  segRef.current = wallSeg;
+  // 预分配向量, 避免拖拽中频繁 new
+  const dirRef = useRef(new THREE.Vector3());
+  const anchorRef = useRef(new THREE.Vector3());
+  const mouseRef = useRef(new THREE.Vector3());
+  const projRef = useRef(new THREE.Vector3());
+  const tmpRef = useRef(new THREE.Vector3());
+
+  const pos = edge === 'start' ? wallSeg.start : wallSeg.end;
+  const handlePos: [number, number, number] = [pos[0], yCenter, pos[1]];
+  // 可见柱体半径 (固定 0.12m, 不依赖墙厚, 保证最小可见尺寸)
+  const radius = 0.12;
+  // 不可见命中范围 (更大, 提升选中精度, 不影响视觉)
+  const hitRadius = 0.25;
+
+  const onPointerDown = (e: any) => {
+    e.stopPropagation();
+    setDragging(true);
+  };
+
+  // 拖拽中: 在 window 上监听 pointermove/pointerup, 鼠标移出手柄仍能持续触发
+  useEffect(() => {
+    if (!dragging) return;
+    // 拖拽期间禁用 OrbitControls, 防止视角旋转
+    if (controls) controls.enabled = false;
+    const cur = segRef.current;
+    // 锁定点 (拖拽时保持不动的另一端), 墙体方向轴
+    const anchor = edge === 'start' ? cur.end : cur.start;
+    anchorRef.current.set(anchor[0], 0, anchor[1]);
+    const moving = edge === 'start' ? cur.start : cur.end;
+    dirRef.current.set(moving[0] - anchor[0], 0, moving[1] - anchor[1]);
+    const dirLen = dirRef.current.length();
+    if (dirLen > 0.0001) dirRef.current.divideScalar(dirLen); else dirRef.current.set(1, 0, 0);
+
+    const onMove = (e: PointerEvent) => {
+      const now = performance.now();
+      if (!rectRef.current || now - rectTimeRef.current > 100) {
+        rectRef.current = gl.domElement.getBoundingClientRect();
+        rectTimeRef.current = now;
+      }
+      const rect = rectRef.current!;
+      ndcRef.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      ndcRef.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(ndcRef.current, camera);
+      const hit = raycaster.ray.intersectPlane(planeRef.current, hitRef.current);
+      if (hit) {
+        // 鼠标地面投影 → 投影到墙体方向轴上 → 约束只能沿墙角度延伸
+        mouseRef.current.set(hit.x, 0, hit.z);
+        tmpRef.current.copy(mouseRef.current).sub(anchorRef.current);
+        const t = tmpRef.current.dot(dirRef.current);
+        // 约束最小长度 0.3m, 防止墙体缩成点
+        const minLen = 0.3;
+        const clampedT = t < minLen ? minLen : t;
+        projRef.current.copy(dirRef.current).multiplyScalar(clampedT).add(anchorRef.current);
+        const patch = edge === 'start'
+          ? { start: [projRef.current.x, projRef.current.z] as [number, number] }
+          : { end: [projRef.current.x, projRef.current.z] as [number, number] };
+        updateStructure(`wall:${roomId}:${cur.id}`, patch);
+      }
+    };
+    const onUp = () => {
+      setDragging(false);
+      if (controls) controls.enabled = true;
+      document.body.style.cursor = 'default';
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      if (controls) controls.enabled = true;
+    };
+  }, [dragging, edge, roomId, camera, gl, raycaster, controls, updateStructure]);
+
+  return (
+    <group position={handlePos}>
+      {/* 可见柱体 (墙端柱) */}
+      <mesh
+        onPointerDown={onPointerDown}
+        onPointerOver={(e: any) => { e.stopPropagation(); setHovered(true); if (!dragging) document.body.style.cursor = 'grab'; }}
+        onPointerOut={() => { setHovered(false); if (!dragging) document.body.style.cursor = 'default'; }}
+      >
+        <cylinderGeometry args={[radius, radius, height, 16]} />
+        <meshBasicMaterial
+          color={dragging ? '#22c55e' : hovered ? '#ef4444' : '#f97316'}
+          depthTest={false}
+          transparent
+          opacity={0.9}
+        />
+      </mesh>
+      {/* 不可见命中球 (扩大点击热区, 不影响视觉) */}
+      <mesh
+        onPointerDown={onPointerDown}
+        onPointerOver={(e: any) => { e.stopPropagation(); setHovered(true); if (!dragging) document.body.style.cursor = 'grab'; }}
+        onPointerOut={() => { setHovered(false); if (!dragging) document.body.style.cursor = 'default'; }}
+      >
+        <sphereGeometry args={[hitRadius, 8, 8]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+    </group>
+  );
+}
+
+// 墙体选中高亮 + 端点手柄
+function WallSelection({
+  seg, roomId, midX, midZ, angle, hlLen, effectiveHeight, thickness,
+}: {
+  seg: WallSegment; roomId: string; midX: number; midZ: number; angle: number;
+  hlLen: number; effectiveHeight: number; thickness: number;
+}) {
+  return (
+    <>
+      <mesh position={[midX, effectiveHeight / 2, midZ]} rotation={[0, -angle, 0]} raycast={() => null}>
+        <boxGeometry args={[hlLen, effectiveHeight, thickness]} />
+        <meshBasicMaterial color="#22c55e" transparent opacity={0.18} depthWrite={false} />
+      </mesh>
+      <lineSegments position={[midX, effectiveHeight / 2, midZ]} rotation={[0, -angle, 0]} raycast={() => null}>
+        <edgesGeometry args={[new THREE.BoxGeometry(hlLen * 1.01, effectiveHeight * 1.01, thickness * 1.01)]} />
+        <lineBasicMaterial color="#16a34a" />
+      </lineSegments>
+      <WallEndHandle wallSeg={seg} roomId={roomId} edge="start" yCenter={effectiveHeight / 2} height={effectiveHeight} thickness={thickness} />
+      <WallEndHandle wallSeg={seg} roomId={roomId} edge="end" yCenter={effectiveHeight / 2} height={effectiveHeight} thickness={thickness} />
+    </>
+  );
+}
 
 interface WallsProps {
   segments: WallSegment[];
@@ -90,18 +238,7 @@ export function Walls({
                   roughness={0.9}
                 />
               </mesh>
-              {isSelected && (
-                <>
-                  <mesh position={[midX, effectiveHeight / 2, midZ]} rotation={[0, -angle, 0]}>
-                    <boxGeometry args={[hlLen, effectiveHeight, thickness]} />
-                    <meshBasicMaterial color="#22c55e" transparent opacity={0.18} depthWrite={false} />
-                  </mesh>
-                  <lineSegments position={[midX, effectiveHeight / 2, midZ]} rotation={[0, -angle, 0]}>
-                    <edgesGeometry args={[new THREE.BoxGeometry(hlLen * 1.01, effectiveHeight * 1.01, thickness * 1.01)]} />
-                    <lineBasicMaterial color="#16a34a" />
-                  </lineSegments>
-                </>
-              )}
+              {isSelected && <WallSelection seg={seg} roomId={roomId} midX={midX} midZ={midZ} angle={angle} hlLen={hlLen} effectiveHeight={effectiveHeight} thickness={thickness} />}
             </group>
           );
         }
@@ -141,18 +278,7 @@ export function Walls({
                   roughness={0.9}
                 />
               </mesh>
-              {isSelected && (
-                <>
-                  <mesh position={[midX, effectiveHeight / 2, midZ]} rotation={[0, -angle, 0]}>
-                    <boxGeometry args={[hlLen, effectiveHeight, thickness]} />
-                    <meshBasicMaterial color="#22c55e" transparent opacity={0.18} depthWrite={false} />
-                  </mesh>
-                  <lineSegments position={[midX, effectiveHeight / 2, midZ]} rotation={[0, -angle, 0]}>
-                    <edgesGeometry args={[new THREE.BoxGeometry(hlLen * 1.01, effectiveHeight * 1.01, thickness * 1.01)]} />
-                    <lineBasicMaterial color="#16a34a" />
-                  </lineSegments>
-                </>
-              )}
+              {isSelected && <WallSelection seg={seg} roomId={roomId} midX={midX} midZ={midZ} angle={angle} hlLen={hlLen} effectiveHeight={effectiveHeight} thickness={thickness} />}
             </group>
           );
         }
@@ -227,18 +353,7 @@ export function Walls({
                 </mesh>
               );
             })}
-            {isSelected && (
-              <>
-                <mesh position={[midX, effectiveHeight / 2, midZ]} rotation={[0, -angle, 0]}>
-                  <boxGeometry args={[hlLen, effectiveHeight, thickness]} />
-                  <meshBasicMaterial color="#22c55e" transparent opacity={0.18} depthWrite={false} />
-                </mesh>
-                <lineSegments position={[midX, effectiveHeight / 2, midZ]} rotation={[0, -angle, 0]}>
-                  <edgesGeometry args={[new THREE.BoxGeometry(hlLen * 1.01, effectiveHeight * 1.01, thickness * 1.01)]} />
-                  <lineBasicMaterial color="#16a34a" />
-                </lineSegments>
-              </>
-            )}
+            {isSelected && <WallSelection seg={seg} roomId={roomId} midX={midX} midZ={midZ} angle={angle} hlLen={hlLen} effectiveHeight={effectiveHeight} thickness={thickness} />}
           </group>
         );
       })}

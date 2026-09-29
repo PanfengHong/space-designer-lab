@@ -1,6 +1,6 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { Suspense, useMemo } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import type { Furniture } from '../../types';
 import { Bed } from '../3D/indoor/furniture/Bed';
@@ -47,6 +47,25 @@ const CATALOG: CatalogItem[] = [
   { type: 'decor', name: '落地灯', size: [0.4, 1.6, 0.4], color: '#e8e0d4' },
 ];
 
+/**
+ * 视口内挂载检测 — 视口外的缩略图不创建 Canvas, 避免超过浏览器 WebGL context 上限
+ */
+function useInView(rootMargin = '150px') {
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => setInView(entry.isIntersecting),
+      { rootMargin, threshold: 0 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [rootMargin]);
+  return { ref, inView };
+}
+
 function renderCatalogFurniture(data: Furniture) {
   switch (data.type) {
     case 'bed': return <Bed data={data} />;
@@ -65,8 +84,9 @@ function renderCatalogFurniture(data: Furniture) {
   }
 }
 
-/** 单个素材的 3D 缩略图 */
+/** 单个素材的 3D 缩略图 (视口外不挂载 Canvas) */
 function CatalogThumbnail({ item }: { item: CatalogItem }) {
+  const { ref, inView } = useInView();
   const furnitureData: Furniture = useMemo(() => ({
     id: `catalog-${item.type}`,
     name: item.name,
@@ -78,39 +98,43 @@ function CatalogThumbnail({ item }: { item: CatalogItem }) {
   }), [item]);
 
   const [w, h, d] = item.size;
-  // 相机距离根据尺寸自适应
   const maxDim = Math.max(w, h, d, 1);
   const camDist = maxDim * 2.2 + 1.2;
 
   return (
-    <Canvas
-      dpr={[1, 2]}
-      gl={{ antialias: true, alpha: true }}
-      camera={{ fov: 35, position: [camDist * 0.7, camDist * 0.5, camDist * 0.7] }}
-      style={{ width: '100%', height: '100%', background: 'transparent', pointerEvents: 'none' }}
-    >
-      <Suspense fallback={null}>
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[3, 5, 3]} intensity={0.5} />
-        <directionalLight position={[-3, 3, -3]} intensity={0.2} />
-        <hemisphereLight args={['#c4d4e8', '#d4c8b8', 0.3]} />
+    <div ref={ref} style={{ width: '100%', height: '100%' }}>
+      {inView ? (
+        <Canvas
+          dpr={[1, 1]}
+          gl={{ antialias: true, alpha: true, powerPreference: 'low-power' }}
+          frameloop="demand"
+          camera={{ fov: 35, position: [camDist * 0.7, camDist * 0.5, camDist * 0.7] }}
+          style={{ width: '100%', height: '100%', background: 'transparent', pointerEvents: 'none' }}
+        >
+          <Suspense fallback={null}>
+            <ambientLight intensity={0.6} />
+            <directionalLight position={[3, 5, 3]} intensity={0.5} />
+            <directionalLight position={[-3, 3, -3]} intensity={0.2} />
+            <hemisphereLight args={['#c4d4e8', '#d4c8b8', 0.3]} />
 
-        <group position={[0, -h / 2, 0]}>
-          {renderCatalogFurniture(furnitureData)}
-        </group>
+            <group position={[0, -h / 2, 0]}>
+              {renderCatalogFurniture(furnitureData)}
+            </group>
 
-        <OrbitControls
-          enablePan={false}
-          enableZoom={false}
-          autoRotate
-          autoRotateSpeed={2}
-          minPolarAngle={Math.PI / 4}
-          maxPolarAngle={Math.PI / 2.2}
-          target={[0, 0, 0]}
-          enabled={false}
-        />
-      </Suspense>
-    </Canvas>
+            <OrbitControls
+              enablePan={false}
+              enableZoom={false}
+              autoRotate
+              autoRotateSpeed={2}
+              minPolarAngle={Math.PI / 4}
+              maxPolarAngle={Math.PI / 2.2}
+              target={[0, 0, 0]}
+              enabled={false}
+            />
+          </Suspense>
+        </Canvas>
+      ) : null}
+    </div>
   );
 }
 

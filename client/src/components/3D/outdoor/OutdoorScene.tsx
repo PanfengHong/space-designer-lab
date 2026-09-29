@@ -200,7 +200,6 @@ export function OutdoorScene() {
     draggingOutdoor,
     setDraggingOutdoor,
     setOutdoorDragGhostPos,
-    outdoorDragGhostPos,
     addGroundItem,
     addOutdoorObject,
   } = useAppStore();
@@ -269,7 +268,6 @@ export function OutdoorScene() {
         background={bgColor}
         enableDrag
         dragSize={draggingOutdoor?.size ?? null}
-        dragGhostPos={outdoorDragGhostPos}
         dragValidator={(x, z) => isInsideGround(x, z, outdoorSceneData.ground)}
         onDragOver={handleDragOver}
         onDrop={handleDrop}

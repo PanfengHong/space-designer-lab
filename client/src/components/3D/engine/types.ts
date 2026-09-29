@@ -86,8 +86,6 @@ export interface BaseSceneProps {
   enableDrag?: boolean;
   /** 拖拽元素尺寸 (预览框大小) */
   dragSize?: [number, number, number] | null;
-  /** 拖拽预览位置 */
-  dragGhostPos?: [number, number] | null;
   /** 放置位置校验 */
   dragValidator?: (x: number, z: number) => boolean;
   /** 拖拽移动回调 (更新预览位置) */

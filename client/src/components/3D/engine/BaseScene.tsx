@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useCallback } from 'react';
+import { Suspense, useEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, Grid } from '@react-three/drei';
 import * as THREE from 'three';
@@ -183,73 +183,130 @@ function EngineLighting({ mode, configs }: { mode: string; configs: Record<strin
   );
 }
 
-/* ==================== 拖拽预览框 ==================== */
-function EngineDragGhost({
-  size,
-  ghostPos,
-  validator,
-}: {
+/* ==================== 拖拽预览框 (forwardRef, 事件直写) ==================== */
+const _ghostColor = new THREE.Color();
+export interface EngineDragGhostHandle {
+  group: THREE.Group | null;
+  boxMat: THREE.MeshBasicMaterial | null;
+  lineMat: THREE.LineBasicMaterial | null;
+  height: number;
+}
+const EngineDragGhost = forwardRef<EngineDragGhostHandle, {
   size: [number, number, number];
-  ghostPos: [number, number];
-  validator?: (x: number, z: number) => boolean;
-}) {
-  const [x, z] = ghostPos;
+}>(function EngineDragGhost({ size }, ref) {
   const [w, h, d] = size;
-  const valid = validator ? validator(x, z) : true;
-  const color = valid ? '#22c55e' : '#ef4444';
-
+  const groupRef = useRef<THREE.Group>(null);
+  const boxMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const lineMatRef = useRef<THREE.LineBasicMaterial>(null);
+  const geometry = useMemo(() => new THREE.BoxGeometry(w, h, d), [w, h, d]);
+  const edges = useMemo(() => new THREE.EdgesGeometry(geometry), [geometry]);
+  useImperativeHandle(ref, () => ({
+    group: groupRef.current,
+    boxMat: boxMatRef.current,
+    lineMat: lineMatRef.current,
+    height: h,
+  }), [h]);
   return (
-    <group position={[x, h / 2, z]}>
-      <mesh>
-        <boxGeometry args={[w, h, d]} />
-        <meshBasicMaterial color={color} transparent opacity={0.25} depthWrite={false} />
+    <group ref={groupRef} visible={false}>
+      <mesh geometry={geometry}>
+        <meshBasicMaterial ref={boxMatRef} transparent opacity={0.25} depthWrite={false} />
       </mesh>
-      <lineSegments>
-        <edgesGeometry args={[new THREE.BoxGeometry(w, h, d)]} />
-        <lineBasicMaterial color={color} />
+      <lineSegments geometry={edges}>
+        <lineBasicMaterial ref={lineMatRef} />
       </lineSegments>
     </group>
   );
-}
+});
 
 /* ==================== 引擎主体 ==================== */
 export function BaseScene(props: BaseSceneProps) {
   const {
     center, viewMode, resetCamera, cameraPresets, defaultFov = 50,
     walkPoints = [], lighting, lightingConfigs, grid, background,
-    enableDrag = false, dragSize, dragGhostPos, dragValidator,
+    enableDrag = false, dragSize, dragValidator,
     onDragOver, onDrop, onDragEnd, onPointerMissed, children,
   } = props;
 
   const walkthroughIndex = useAppStore((s) => s.walkthroughIndex);
+  const ghostHandleRef = useRef<EngineDragGhostHandle>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    if (!enableDrag) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-    const floor = screenToFloor(e.clientX, e.clientY);
-    if (floor) {
-      const [sx, sz] = snapToGrid(floor[0], floor[1]);
-      onDragOver?.(sx, sz);
-    }
-  }, [enableDrag, onDragOver]);
+  // 保存最新 props 到 ref, 供原生事件处理器读取, 避免重新绑定 listener
+  const propsRef = useRef({ enableDrag, dragValidator, onDragOver, onDrop, onDragEnd });
+  propsRef.current = { enableDrag, dragValidator, onDragOver, onDrop, onDragEnd };
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    if (!enableDrag) return;
-    e.preventDefault();
-    const floor = screenToFloor(e.clientX, e.clientY);
-    if (floor) {
+  useEffect(() => {
+    const container = canvasContainerRef.current;
+    if (!container) return;
+
+    // 找到实际的 canvas DOM (R3F 在 container 内渲染 <canvas>)
+    const getCanvas = () => container.querySelector('canvas') as HTMLCanvasElement | null;
+
+    const applyGhost = (clientX: number, clientY: number) => {
+      const floor = screenToFloor(clientX, clientY);
+      if (!floor) return false;
       const [sx, sz] = snapToGrid(floor[0], floor[1]);
-      if (dragValidator ? dragValidator(sx, sz) : true) {
-        onDrop?.(sx, sz);
+      const handle = ghostHandleRef.current;
+      if (handle?.group) {
+        handle.group.visible = true;
+        handle.group.position.set(sx, handle.height / 2, sz);
+        const valid = propsRef.current.dragValidator ? propsRef.current.dragValidator(sx, sz) : true;
+        _ghostColor.set(valid ? '#22c55e' : '#ef4444');
+        handle.boxMat?.color.copy(_ghostColor);
+        handle.lineMat?.color.copy(_ghostColor);
       }
-    }
-    onDragEnd?.();
-  }, [enableDrag, dragValidator, onDrop, onDragEnd]);
+      propsRef.current.onDragOver?.(sx, sz);
+      return true;
+    };
+
+    const onNativeDragOver = (e: DragEvent) => {
+      if (!propsRef.current.enableDrag) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      applyGhost(e.clientX, e.clientY);
+    };
+
+    const onNativeDrop = (e: DragEvent) => {
+      if (!propsRef.current.enableDrag) return;
+      e.preventDefault();
+      const floor = screenToFloor(e.clientX, e.clientY);
+      if (floor) {
+        const [sx, sz] = snapToGrid(floor[0], floor[1]);
+        if (propsRef.current.dragValidator ? propsRef.current.dragValidator(sx, sz) : true) {
+          propsRef.current.onDrop?.(sx, sz);
+        }
+      }
+      const handle = ghostHandleRef.current;
+      if (handle?.group) handle.group.visible = false;
+      propsRef.current.onDragEnd?.();
+    };
+
+    const hideGhost = () => {
+      const handle = ghostHandleRef.current;
+      if (handle?.group) handle.group.visible = false;
+    };
+
+    // 原生监听绑定在容器上 (事件捕获阶段, 抢在 React 之前)
+    container.addEventListener('dragover', onNativeDragOver);
+    container.addEventListener('drop', onNativeDrop);
+    container.addEventListener('dragleave', hideGhost);
+    window.addEventListener('dragend', hideGhost);
+
+    return () => {
+      container.removeEventListener('dragover', onNativeDragOver);
+      container.removeEventListener('drop', onNativeDrop);
+      container.removeEventListener('dragleave', hideGhost);
+      window.removeEventListener('dragend', hideGhost);
+    };
+  }, []);
 
   const isWalkthrough = viewMode === 'walkthrough';
 
   return (
+    <div
+      ref={canvasContainerRef}
+      style={{ width: '100%', height: '100%', position: 'relative' }}
+    >
     <Canvas
       shadows
       dpr={[1, 2]}
@@ -262,8 +319,6 @@ export function BaseScene(props: BaseSceneProps) {
       onPointerMove={(e) => { if (e.buttons === 2) e.nativeEvent.preventDefault(); }}
       onMouseDown={(e) => { if (e.button === 2) e.preventDefault(); }}
       onMouseMove={(e) => { if (e.buttons === 2) e.preventDefault(); }}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
     >
       <Suspense fallback={null}>
         <DisableBrowserGestures />
@@ -310,12 +365,13 @@ export function BaseScene(props: BaseSceneProps) {
           />
         )}
 
-        {enableDrag && dragSize && dragGhostPos && (
-          <EngineDragGhost size={dragSize} ghostPos={dragGhostPos} validator={dragValidator} />
+        {enableDrag && dragSize && (
+          <EngineDragGhost ref={ghostHandleRef} size={dragSize} />
         )}
 
         {children}
       </Suspense>
     </Canvas>
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { Suspense, useMemo } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { ModelItem, Furniture, SceneData } from '../../types';
 import { Bed } from '../3D/indoor/furniture/Bed';
@@ -19,6 +19,25 @@ import { Decor } from '../3D/indoor/furniture/Decor';
 import { mockSceneData, oneBedroomScene, twoBedroomScene, modernApartmentScene } from '../../data/mockScene';
 import { getOutdoorSceneForModel } from '../../data/outdoorScene';
 import type { GroundItem, OutdoorObject, OutdoorSceneData } from '../../types';
+
+/**
+ * 视口内挂载检测 — 视口外的缩略图不创建 Canvas, 避免超过浏览器 WebGL context 上限
+ */
+function useInView(rootMargin = '150px') {
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => setInView(entry.isIntersecting),
+      { rootMargin, threshold: 0 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [rootMargin]);
+  return { ref, inView };
+}
 
 function renderFurniture(data: Furniture) {
   switch (data.type) {
@@ -255,6 +274,7 @@ function CampusPreview({ item }: { item: ModelItem }) {
 }
 
 export function ModelThumbnail({ item }: { item: ModelItem }) {
+  const { ref, inView } = useInView();
   // 根据家具尺寸计算相机距离 (留出余量, 确保完整显示)
   const camDist =
     item.category === 'furniture'
@@ -288,29 +308,34 @@ export function ModelThumbnail({ item }: { item: ModelItem }) {
   }, [item]);
 
   return (
-    <Canvas
-      dpr={[1, 2]}
-      gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping }}
-      camera={{ fov: 35, position: [target[0] + camDist * 0.7, camDist * 0.6, target[2] + camDist * 0.7] }}
-      style={{ width: '100%', height: '100%', background: 'transparent' }}
-    >
-      <Suspense fallback={null}>
-        {item.category === 'furniture'
-          ? <FurniturePreview item={item} />
-          : item.category === 'campus'
-            ? <CampusPreview item={item} />
-            : <ApartmentPreview item={item} />}
-        <OrbitControls
-          enablePan={false}
-          enableZoom={false}
-          autoRotate
-          autoRotateSpeed={1.2}
-          minPolarAngle={Math.PI / 3.5}
-          maxPolarAngle={Math.PI / 2.1}
-          target={target}
-          enabled={false}
-        />
-      </Suspense>
-    </Canvas>
+    <div ref={ref} style={{ width: '100%', height: '100%' }}>
+      {inView ? (
+        <Canvas
+          dpr={[1, 1]}
+          gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, powerPreference: 'low-power' }}
+          frameloop="demand"
+          camera={{ fov: 35, position: [target[0] + camDist * 0.7, camDist * 0.6, target[2] + camDist * 0.7] }}
+          style={{ width: '100%', height: '100%', background: 'transparent' }}
+        >
+          <Suspense fallback={null}>
+            {item.category === 'furniture'
+              ? <FurniturePreview item={item} />
+              : item.category === 'campus'
+                ? <CampusPreview item={item} />
+                : <ApartmentPreview item={item} />}
+            <OrbitControls
+              enablePan={false}
+              enableZoom={false}
+              autoRotate
+              autoRotateSpeed={1.2}
+              minPolarAngle={Math.PI / 3.5}
+              maxPolarAngle={Math.PI / 2.1}
+              target={target}
+              enabled={false}
+            />
+          </Suspense>
+        </Canvas>
+      ) : null}
+    </div>
   );
 }

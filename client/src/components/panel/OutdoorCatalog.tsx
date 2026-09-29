@@ -1,6 +1,6 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { Suspense, useMemo } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { OutdoorThumbnailContent } from '../3D/outdoor/OutdoorScene';
 import type { GroundItem, OutdoorObject } from '../../types';
@@ -43,7 +43,27 @@ export const OBJECT_CATALOG: CatalogEntry[] = [
   { kind: 'object', type: 'tree', name: '树木', size: [3.2, 6, 3.2], color: '#bfe3c0' },
 ];
 
+/**
+ * 视口内挂载检测 — 视口外的缩略图不创建 Canvas, 避免超过浏览器 WebGL context 上限
+ */
+function useInView(rootMargin = '150px') {
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => setInView(entry.isIntersecting),
+      { rootMargin, threshold: 0 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [rootMargin]);
+  return { ref, inView };
+}
+
 function CatalogThumbnail({ entry }: { entry: CatalogEntry }) {
+  const { ref, inView } = useInView();
   const item = useMemo<GroundItem | OutdoorObject>(() => ({
     id: `outdoor-catalog-${entry.kind}-${entry.type}`,
     name: entry.name,
@@ -62,32 +82,37 @@ function CatalogThumbnail({ entry }: { entry: CatalogEntry }) {
   const camDist = maxDim * 1.5 + 1.4;
 
   return (
-    <Canvas
-      dpr={[1, 2]}
-      gl={{ antialias: true, alpha: true }}
-      camera={{ fov: 35, position: [camDist * 0.75, camDist * 0.55, camDist * 0.75] }}
-      style={{ width: '100%', height: '100%', background: 'transparent', pointerEvents: 'none' }}
-    >
-      <Suspense fallback={null}>
-        <ambientLight intensity={0.65} />
-        <directionalLight position={[3, 5, 3]} intensity={0.55} />
-        <directionalLight position={[-3, 3, -3]} intensity={0.25} color="#c8daf0" />
-        <hemisphereLight args={['#dceaf6', '#e4eadf', 0.4]} />
-        <group position={[0, -h / 2, 0]}>
-          <OutdoorThumbnailContent item={item} />
-        </group>
-        <OrbitControls
-          enablePan={false}
-          enableZoom={false}
-          autoRotate
-          autoRotateSpeed={1.5}
-          minPolarAngle={Math.PI / 4}
-          maxPolarAngle={Math.PI / 2.2}
-          target={[0, 0, 0]}
-          enabled={false}
-        />
-      </Suspense>
-    </Canvas>
+    <div ref={ref} style={{ width: '100%', height: '100%' }}>
+      {inView ? (
+        <Canvas
+          dpr={[1, 1]}
+          gl={{ antialias: true, alpha: true, powerPreference: 'low-power' }}
+          frameloop="demand"
+          camera={{ fov: 35, position: [camDist * 0.75, camDist * 0.55, camDist * 0.75] }}
+          style={{ width: '100%', height: '100%', background: 'transparent', pointerEvents: 'none' }}
+        >
+          <Suspense fallback={null}>
+            <ambientLight intensity={0.65} />
+            <directionalLight position={[3, 5, 3]} intensity={0.55} />
+            <directionalLight position={[-3, 3, -3]} intensity={0.25} color="#c8daf0" />
+            <hemisphereLight args={['#dceaf6', '#e4eadf', 0.4]} />
+            <group position={[0, -h / 2, 0]}>
+              <OutdoorThumbnailContent item={item} />
+            </group>
+            <OrbitControls
+              enablePan={false}
+              enableZoom={false}
+              autoRotate
+              autoRotateSpeed={1.5}
+              minPolarAngle={Math.PI / 4}
+              maxPolarAngle={Math.PI / 2.2}
+              target={[0, 0, 0]}
+              enabled={false}
+            />
+          </Suspense>
+        </Canvas>
+      ) : null}
+    </div>
   );
 }
 
