@@ -1,8 +1,10 @@
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import type { Furniture } from '../../types';
+import {
+  requestThumbnail,
+  useThumbnailUrl,
+} from '../../utils/thumbnailCapture';
 import { Bed } from '../3D/indoor/furniture/Bed';
 import { Sofa } from '../3D/indoor/furniture/Sofa';
 import { Table } from '../3D/indoor/furniture/Table';
@@ -17,12 +19,15 @@ import { Stove } from '../3D/indoor/furniture/Stove';
 import { Decor } from '../3D/indoor/furniture/Decor';
 
 /**
- * 家具素材库 — 2 列网格 + 3D 缩略图
+ * 家具素材库 — 2 列网格 + 缩略图
  * 室内设计层解锁时显示在 LeftPanel 底部
  *
  * 拖拽机制: HTML5 drag-and-drop
- * - onDragStart: 设置 store.draggingFurniture (模板数据)
+ * - onDragStart: 设置 store.draggingFurniture (模板数据) + 自定义透明拖拽影像
  * - Canvas 层 onDragOver/onDrop: raycast 计算地板位置并放置
+ *
+ * 缩略图机制: 全局单个隐藏 Canvas 离线捕获 (见 utils/thumbnailCapture.tsx),
+ * 不再为每个素材创建独立 WebGL context
  */
 
 interface CatalogItem {
@@ -47,25 +52,6 @@ const CATALOG: CatalogItem[] = [
   { type: 'decor', name: '落地灯', size: [0.4, 1.6, 0.4], color: '#e8e0d4' },
 ];
 
-/**
- * 视口内挂载检测 — 视口外的缩略图不创建 Canvas, 避免超过浏览器 WebGL context 上限
- */
-function useInView(rootMargin = '150px') {
-  const ref = useRef<HTMLDivElement>(null);
-  const [inView, setInView] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      ([entry]) => setInView(entry.isIntersecting),
-      { rootMargin, threshold: 0 }
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [rootMargin]);
-  return { ref, inView };
-}
-
 function renderCatalogFurniture(data: Furniture) {
   switch (data.type) {
     case 'bed': return <Bed data={data} />;
@@ -84,64 +70,83 @@ function renderCatalogFurniture(data: Furniture) {
   }
 }
 
-/** 单个素材的 3D 缩略图 (视口外不挂载 Canvas) */
-function CatalogThumbnail({ item }: { item: CatalogItem }) {
-  const { ref, inView } = useInView();
-  const furnitureData: Furniture = useMemo(() => ({
-    id: `catalog-${item.type}`,
-    name: item.name,
-    position: [0, 0, 0],
-    rotation: 0,
-    size: item.size,
-    type: item.type,
-    color: item.color,
-  }), [item]);
+/** 缩略图键: 家具类型即唯一外观 (尺寸/颜色随类型固定) */
+const thumbKey = (item: CatalogItem) => `furniture-${item.type}`;
 
-  const [w, h, d] = item.size;
-  const maxDim = Math.max(w, h, d, 1);
-  const camDist = maxDim * 2.2 + 1.2;
+/** 单个素材缩略图 — 由全局捕获宿主离线渲染为透明 PNG */
+function CatalogThumbnail({ item }: { item: CatalogItem }) {
+  const key = thumbKey(item);
+  const url = useThumbnailUrl(key);
+
+  useEffect(() => {
+    const [w, h] = item.size;
+    const maxDim = Math.max(...item.size, 1);
+    const camDist = maxDim * 2.2 + 1.2;
+    const furnitureData: Furniture = {
+      id: `catalog-${item.type}`,
+      name: item.name,
+      position: [0, 0, 0],
+      rotation: 0,
+      size: item.size,
+      type: item.type,
+      color: item.color,
+    };
+
+    requestThumbnail({
+      key,
+      camera: { fov: 35, position: [camDist * 0.7, camDist * 0.5, camDist * 0.7] },
+      content: (
+        <>
+          <ambientLight intensity={0.6} />
+          <directionalLight position={[3, 5, 3]} intensity={0.5} />
+          <directionalLight position={[-3, 3, -3]} intensity={0.2} />
+          <hemisphereLight args={['#c4d4e8', '#d4c8b8', 0.3]} />
+          <group position={[0, -h / 2, 0]}>
+            {renderCatalogFurniture(furnitureData)}
+          </group>
+        </>
+      ),
+    });
+  }, [item, key]);
 
   return (
-    <div ref={ref} style={{ width: '100%', height: '100%' }}>
-      {inView ? (
-        <Canvas
-          dpr={[1, 1]}
-          gl={{ antialias: true, alpha: true, powerPreference: 'low-power' }}
-          frameloop="demand"
-          camera={{ fov: 35, position: [camDist * 0.7, camDist * 0.5, camDist * 0.7] }}
-          style={{ width: '100%', height: '100%', background: 'transparent', pointerEvents: 'none' }}
-        >
-          <Suspense fallback={null}>
-            <ambientLight intensity={0.6} />
-            <directionalLight position={[3, 5, 3]} intensity={0.5} />
-            <directionalLight position={[-3, 3, -3]} intensity={0.2} />
-            <hemisphereLight args={['#c4d4e8', '#d4c8b8', 0.3]} />
-
-            <group position={[0, -h / 2, 0]}>
-              {renderCatalogFurniture(furnitureData)}
-            </group>
-
-            <OrbitControls
-              enablePan={false}
-              enableZoom={false}
-              autoRotate
-              autoRotateSpeed={2}
-              minPolarAngle={Math.PI / 4}
-              maxPolarAngle={Math.PI / 2.2}
-              target={[0, 0, 0]}
-              enabled={false}
-            />
-          </Suspense>
-        </Canvas>
-      ) : null}
+    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {url ? (
+        <img
+          src={url}
+          alt={item.name}
+          draggable={false}
+          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+        />
+      ) : (
+        <div className="w-5 h-5 rounded-full border-2 border-gray-200 border-t-gray-400 animate-spin" />
+      )}
     </div>
   );
 }
 
+/**
+ * 从卡片 DOM 中取缩略图 <img> 作为自定义拖拽影像
+ * 透明 PNG 只包含家具本体, 不带白色卡片背景
+ */
+function setCustomDragImage(e: React.DragEvent) {
+  const img = (e.currentTarget as HTMLElement).querySelector('img');
+  if (img && img.complete && img.naturalWidth > 0) {
+    try {
+      e.dataTransfer.setDragImage(img, Math.round(img.clientWidth / 2), Math.round(img.clientHeight / 2));
+    } catch {
+      // setDragImage 失败时回退浏览器默认快照
+    }
+  }
+}
+
 export function FurnitureCatalog() {
   const setDraggingFurniture = useAppStore((s) => s.setDraggingFurniture);
+  const setDraggingStructure = useAppStore((s) => s.setDraggingStructure);
 
   const handleDragStart = (e: React.DragEvent, item: CatalogItem) => {
+    // 与建筑结构素材库互斥, 避免落下时被判成两种元素
+    setDraggingStructure(null);
     setDraggingFurniture({
       type: item.type,
       name: item.name,
@@ -150,6 +155,7 @@ export function FurnitureCatalog() {
     });
     e.dataTransfer.setData('text/plain', item.type);
     e.dataTransfer.effectAllowed = 'copy';
+    setCustomDragImage(e);
   };
 
   return (
@@ -167,7 +173,7 @@ export function FurnitureCatalog() {
             className="flex flex-col bg-gray-50 hover:bg-gray-100 rounded-md cursor-grab active:cursor-grabbing transition-colors select-none overflow-hidden"
             title={`${item.name} ${item.size[0]}×${item.size[2]}m`}
           >
-            {/* 3D 缩略图区 */}
+            {/* 缩略图区 (透明 PNG, 无独立 WebGL context) */}
             <div className="h-16 bg-gradient-to-br from-gray-50 to-gray-100">
               <CatalogThumbnail item={item} />
             </div>

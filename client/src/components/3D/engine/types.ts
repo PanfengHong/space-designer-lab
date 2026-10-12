@@ -86,8 +86,21 @@ export interface BaseSceneProps {
   enableDrag?: boolean;
   /** 拖拽元素尺寸 (预览框大小) */
   dragSize?: [number, number, number] | null;
-  /** 放置位置校验 */
+  /** 预览框相对落点的偏移 (用于几何体非居中的元素, 如四分之一圆淋浴间) */
+  dragOffset?: [number, number] | null;
+  /** 放置位置校验 (返回 false 时预览框变红且不可放下) */
   dragValidator?: (x: number, z: number) => boolean;
+  /** 放置校验 (带原因): 优先于 dragValidator, 返回原因时画布上会提示 */
+  dragValidatorDetailed?: (x: number, z: number) => {
+    ok: boolean;
+    reason?: string;
+    /**
+     * 吸附后的落点。家具不需要该项 (直接用鼠标落点);
+     * 建筑结构元素 (门窗必须贴墙、飘窗必须凸出墙面) 会返回吸附结果,
+     * 预览框的位置/朝向/抬升都以它为准, 保证"看到哪里就放到哪里"。
+     */
+    snap?: { x: number; z: number; rotation?: number; y?: number; lz?: number };
+  };
   /** 拖拽移动回调 (更新预览位置) */
   onDragOver?: (x: number, z: number) => void;
   /** 放置回调 */

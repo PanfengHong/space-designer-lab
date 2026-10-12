@@ -22,6 +22,11 @@ export function RightPanel() {
             onChange={(v) => updateViewSettings('showSpaceName', v)}
           />
           <SettingToggle
+            label="尺寸标注"
+            value={!!viewSettings.showDimensions}
+            onChange={(v) => updateViewSettings('showDimensions', v)}
+          />
+          <SettingToggle
             label="交通动线"
             value={viewSettings.showTrafficLines}
             onChange={(v) => updateViewSettings('showTrafficLines', v)}

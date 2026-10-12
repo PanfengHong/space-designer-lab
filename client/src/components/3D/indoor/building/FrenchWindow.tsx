@@ -43,9 +43,9 @@ function FrenchWindowItem({
 }) {
   const { position, width, height, rotation = 0 } = frenchWindow;
 
-  const frameColor = monochrome ? '#ffffff' : '#2a2a2a';
-  const glassColor = monochrome ? '#e8e8e8' : '#b8d4e8';
-  const sillColor = monochrome ? '#f5f5f5' : '#7a7a7a';
+  const frameColor = monochrome ? '#ffffff' : '#ece7de';
+  const glassColor = monochrome ? '#e8ecee' : '#aed4e6';
+  const sillColor = monochrome ? '#f5f5f5' : '#d9d4cc';
   const handleColor = monochrome ? '#cccccc' : '#c0c0c0';
 
   const fW = 0.07;            // 外框宽度
@@ -167,23 +167,24 @@ function FrenchWindowItem({
               <meshStandardMaterial
                 color={glassColor}
                 transparent
-                opacity={0.15}
-                roughness={0.08}
-                metalness={0}
+                opacity={0.3}
+                roughness={0.06}
+                metalness={0.05}
+                envMapIntensity={1.4}
                 side={THREE.DoubleSide}
               />
             </mesh>
 
-            {/* 门扇玻璃黑色描边 (勾勒每扇门轮廓) */}
+            {/* 门扇玻璃描边 (勾勒每扇门轮廓) */}
             <lineSegments position={[cx, halfH, 0]}>
               <edgesGeometry args={[new THREE.BoxGeometry(panelW - frameW * 2, height - frameW * 2, gT)]} />
-              <lineBasicMaterial color="#1a1a1a" />
+              <lineBasicMaterial color="#8fa3b0" />
             </lineSegments>
 
             {/* 门扇外框描边 */}
             <lineSegments position={[cx, halfH, 0]}>
               <edgesGeometry args={[new THREE.BoxGeometry(panelW, height, frameDepth * 0.8)]} />
-              <lineBasicMaterial color="#111111" linewidth={1} />
+              <lineBasicMaterial color="#9fb0bc" />
             </lineSegments>
 
             {/* 门把手 (竖向长条) */}
@@ -198,7 +199,7 @@ function FrenchWindowItem({
       {/* ====== 整体外轮廓 ====== */}
       <lineSegments position={[0, halfH, 0]}>
         <edgesGeometry args={[new THREE.BoxGeometry(width, height, frameDepth)]} />
-        <lineBasicMaterial color="#111111" linewidth={1} />
+        <lineBasicMaterial color="#9fb0bc" />
       </lineSegments>
       {/* 选中高亮 */}
       {isSelected && (

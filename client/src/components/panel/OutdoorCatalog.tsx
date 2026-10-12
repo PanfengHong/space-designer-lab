@@ -1,13 +1,18 @@
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { OutdoorThumbnailContent } from '../3D/outdoor/OutdoorScene';
+import {
+  requestThumbnail,
+  useThumbnailUrl,
+} from '../../utils/thumbnailCapture';
 import type { GroundItem, OutdoorObject } from '../../types';
 
 /**
  * 户外素材库 — 地面元素 (地面/草地/河流/道路) + 空间对象 (车辆/建筑)
  * 拖拽到设计区域放置, 复用室内素材库的 HTML5 拖拽机制
+ *
+ * 缩略图机制: 全局单个隐藏 Canvas 离线捕获 (见 utils/thumbnailCapture.tsx),
+ * 不再为每个素材创建独立 WebGL context
  */
 
 interface CatalogEntry {
@@ -43,77 +48,77 @@ export const OBJECT_CATALOG: CatalogEntry[] = [
   { kind: 'object', type: 'tree', name: '树木', size: [3.2, 6, 3.2], color: '#bfe3c0' },
 ];
 
-/**
- * 视口内挂载检测 — 视口外的缩略图不创建 Canvas, 避免超过浏览器 WebGL context 上限
- */
-function useInView(rootMargin = '150px') {
-  const ref = useRef<HTMLDivElement>(null);
-  const [inView, setInView] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      ([entry]) => setInView(entry.isIntersecting),
-      { rootMargin, threshold: 0 }
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [rootMargin]);
-  return { ref, inView };
-}
+/** 缩略图键: kind+name 唯一 (同 type 不同外观用 name 区分, 如十字/三岔路口) */
+const thumbKey = (entry: CatalogEntry) => `outdoor-${entry.kind}-${entry.name}`;
 
+/** 单个素材缩略图 — 由全局捕获宿主离线渲染为透明 PNG */
 function CatalogThumbnail({ entry }: { entry: CatalogEntry }) {
-  const { ref, inView } = useInView();
-  const item = useMemo<GroundItem | OutdoorObject>(() => ({
-    id: `outdoor-catalog-${entry.kind}-${entry.type}`,
-    name: entry.name,
-    position: [0, 0, 0],
-    rotation: 0,
-    size: entry.size,
-    color: entry.color,
-    // 判别联合类型
-    ...(entry.kind === 'ground'
-      ? { type: entry.type as GroundItem['type'] }
-      : { type: entry.type as OutdoorObject['type'] }),
-  } as GroundItem | OutdoorObject), [entry]);
+  const key = thumbKey(entry);
+  const url = useThumbnailUrl(key);
 
-  const [w, h, d] = entry.size;
-  const maxDim = Math.max(w, h, d, 1);
-  const camDist = maxDim * 1.5 + 1.4;
+  useEffect(() => {
+    const [w, h] = entry.size;
+    const maxDim = Math.max(...entry.size, 1);
+    const camDist = maxDim * 1.5 + 1.4;
+    const item = {
+      id: `outdoor-catalog-${entry.kind}-${entry.name}`,
+      name: entry.name,
+      position: [0, 0, 0],
+      rotation: 0,
+      size: entry.size,
+      color: entry.color,
+      // 判别联合类型
+      ...(entry.kind === 'ground'
+        ? { type: entry.type as GroundItem['type'] }
+        : { type: entry.type as OutdoorObject['type'] }),
+    } as GroundItem | OutdoorObject;
+
+    requestThumbnail({
+      key,
+      camera: { fov: 35, position: [camDist * 0.75, camDist * 0.55, camDist * 0.75] },
+      content: (
+        <>
+          <ambientLight intensity={0.65} />
+          <directionalLight position={[3, 5, 3]} intensity={0.55} />
+          <directionalLight position={[-3, 3, -3]} intensity={0.25} color="#c8daf0" />
+          <hemisphereLight args={['#dceaf6', '#e4eadf', 0.4]} />
+          <group position={[0, -h / 2, 0]}>
+            <OutdoorThumbnailContent item={item} />
+          </group>
+        </>
+      ),
+    });
+  }, [entry, key]);
 
   return (
-    <div ref={ref} style={{ width: '100%', height: '100%' }}>
-      {inView ? (
-        <Canvas
-          dpr={[1, 1]}
-          gl={{ antialias: true, alpha: true, powerPreference: 'low-power' }}
-          frameloop="demand"
-          camera={{ fov: 35, position: [camDist * 0.75, camDist * 0.55, camDist * 0.75] }}
-          style={{ width: '100%', height: '100%', background: 'transparent', pointerEvents: 'none' }}
-        >
-          <Suspense fallback={null}>
-            <ambientLight intensity={0.65} />
-            <directionalLight position={[3, 5, 3]} intensity={0.55} />
-            <directionalLight position={[-3, 3, -3]} intensity={0.25} color="#c8daf0" />
-            <hemisphereLight args={['#dceaf6', '#e4eadf', 0.4]} />
-            <group position={[0, -h / 2, 0]}>
-              <OutdoorThumbnailContent item={item} />
-            </group>
-            <OrbitControls
-              enablePan={false}
-              enableZoom={false}
-              autoRotate
-              autoRotateSpeed={1.5}
-              minPolarAngle={Math.PI / 4}
-              maxPolarAngle={Math.PI / 2.2}
-              target={[0, 0, 0]}
-              enabled={false}
-            />
-          </Suspense>
-        </Canvas>
-      ) : null}
+    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {url ? (
+        <img
+          src={url}
+          alt={entry.name}
+          draggable={false}
+          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+        />
+      ) : (
+        <div className="w-5 h-5 rounded-full border-2 border-gray-200 border-t-gray-400 animate-spin" />
+      )}
     </div>
   );
+}
+
+/**
+ * 从卡片 DOM 中取缩略图 <img> 作为自定义拖拽影像
+ * 透明 PNG 只包含素材本体, 不带白色卡片背景
+ */
+function setCustomDragImage(e: React.DragEvent) {
+  const img = (e.currentTarget as HTMLElement).querySelector('img');
+  if (img && img.complete && img.naturalWidth > 0) {
+    try {
+      e.dataTransfer.setDragImage(img, Math.round(img.clientWidth / 2), Math.round(img.clientHeight / 2));
+    } catch {
+      // setDragImage 失败时回退浏览器默认快照
+    }
+  }
 }
 
 export function OutdoorCatalog({ kind }: { kind: 'ground' | 'object' }) {
@@ -130,6 +135,7 @@ export function OutdoorCatalog({ kind }: { kind: 'ground' | 'object' }) {
     });
     e.dataTransfer.setData('text/plain', entry.type);
     e.dataTransfer.effectAllowed = 'copy';
+    setCustomDragImage(e);
   };
 
   return (
@@ -140,13 +146,14 @@ export function OutdoorCatalog({ kind }: { kind: 'ground' | 'object' }) {
       <div className="grid grid-cols-2 gap-1.5">
         {entries.map((entry) => (
           <div
-            key={`${entry.kind}-${entry.type}`}
+            key={`${entry.kind}-${entry.type}-${entry.name}`}
             draggable
             onDragStart={(e) => handleDragStart(e, entry)}
             onDragEnd={() => setDraggingOutdoor(null)}
             className="flex flex-col bg-gray-50 hover:bg-gray-100 rounded-md cursor-grab active:cursor-grabbing transition-colors select-none overflow-hidden"
             title={`${entry.name} ${entry.size[0]}×${entry.size[2]}m`}
           >
+            {/* 缩略图区 (透明 PNG, 无独立 WebGL context) */}
             <div className="h-16 bg-gradient-to-br from-gray-50 to-gray-100">
               <CatalogThumbnail entry={entry} />
             </div>

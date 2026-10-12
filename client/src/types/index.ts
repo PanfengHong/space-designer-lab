@@ -173,6 +173,7 @@ export interface ViewSettings {
   showTrafficLines: boolean;
   showCeiling: boolean;
   showDoorsOpen: boolean;
+  showDimensions?: boolean; // 平面图: 显示总长宽 + 房间长宽标注 (仅 2D 平面图消费)
   wallCutHeight: number;
   lighting: string;
   showLabels?: boolean; // 户外模式: 显示元素名称标签

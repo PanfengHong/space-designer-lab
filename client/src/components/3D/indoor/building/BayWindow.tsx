@@ -44,9 +44,9 @@ function BayWindowItem({
 }) {
   const { position, width, depth, height, rotation = 0 } = bayWindow;
 
-  const frameColor = monochrome ? '#ffffff' : '#5a5248';
-  const glassColor = monochrome ? '#e8e8e8' : '#8ab5d4';
-  const sillColor = monochrome ? '#f5f5f5' : '#a8a8a8';
+  const frameColor = monochrome ? '#ffffff' : '#ece7de';
+  const glassColor = monochrome ? '#e8ecee' : '#a9cede';
+  const sillColor = monochrome ? '#f5f5f5' : '#d9d4cc';
 
   const fW = 0.08; // 窗框宽度
   const fD = wallThickness * 0.6; // 窗框深度(沿凸出方向)
@@ -124,16 +124,17 @@ function BayWindowItem({
         <meshStandardMaterial
           color={glassColor}
           transparent
-          opacity={0.2}
-          roughness={0.05}
-          metalness={0}
+          opacity={0.3}
+          roughness={0.06}
+          metalness={0.05}
+          envMapIntensity={1.4}
           side={THREE.DoubleSide}
         />
       </mesh>
       {/* 正面玻璃描边 (position 与玻璃一致) */}
       <lineSegments position={[0, height / 2, halfD]}>
         <edgesGeometry args={[new THREE.BoxGeometry(width - fW * 2, height - fW * 2, gT)]} />
-        <lineBasicMaterial color="#1a1a1a" />
+        <lineBasicMaterial color="#8fa3b0" />
       </lineSegments>
 
       {/* ============ 左侧面 (朝 -X) ============ */}
@@ -164,9 +165,10 @@ function BayWindowItem({
         <meshStandardMaterial
           color={glassColor}
           transparent
-          opacity={0.2}
-          roughness={0.05}
-          metalness={0}
+          opacity={0.3}
+          roughness={0.06}
+          metalness={0.05}
+          envMapIntensity={1.4}
           side={THREE.DoubleSide}
         />
       </mesh>
@@ -199,9 +201,10 @@ function BayWindowItem({
         <meshStandardMaterial
           color={glassColor}
           transparent
-          opacity={0.2}
-          roughness={0.05}
-          metalness={0}
+          opacity={0.3}
+          roughness={0.06}
+          metalness={0.05}
+          envMapIntensity={1.4}
           side={THREE.DoubleSide}
         />
       </mesh>
@@ -209,7 +212,7 @@ function BayWindowItem({
       {/* ====== 整体外轮廓黑色描边 (中心在 [0, height/2, halfD]) ====== */}
       <lineSegments position={[0, height / 2, halfD]}>
         <edgesGeometry args={[new THREE.BoxGeometry(width + 0.04, height + 0.1, depth + 0.04)]} />
-        <lineBasicMaterial color="#111111" linewidth={1} />
+        <lineBasicMaterial color="#9fb0bc" />
       </lineSegments>
       {/* 选中高亮 */}
       {isSelected && (

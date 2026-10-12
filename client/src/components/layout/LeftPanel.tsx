@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight, Lock, LockOpen, PanelLeftClose, PanelLeftOpe
 import { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { FurnitureCatalog } from '../panel/FurnitureCatalog';
+import { StructureCatalog } from '../panel/StructureCatalog';
 
 export function LeftPanel() {
   const {
@@ -33,7 +34,7 @@ export function LeftPanel() {
   };
 
   // 子元素列表的展开状态 (建筑层子类)
-  const [buildingSub, setBuildingSub] = useState({ walls: false, doors: false, windows: false });
+  const [buildingSub, setBuildingSub] = useState({ walls: false, doors: false, windows: false, catalog: false });
   const [interiorSub, setInteriorSub] = useState({ furniture: true, catalog: true });
 
   // 收集建筑结构元素
@@ -225,6 +226,16 @@ export function LeftPanel() {
                       ))}
                     </div>
                   )}
+
+                  {/* 结构素材库 — 拖拽到设计区域放置 (门窗自动吸附墙面) */}
+                  <div
+                    className="px-2 py-1.5 cursor-pointer flex items-center gap-1 hover:bg-gray-50"
+                    onClick={() => setBuildingSub((s) => ({ ...s, catalog: !s.catalog }))}
+                  >
+                    {buildingSub.catalog ? <ChevronDown size={11} className="text-gray-400" /> : <ChevronRight size={11} className="text-gray-400" />}
+                    <span className="text-[10px] text-gray-500">结构素材库</span>
+                  </div>
+                  {buildingSub.catalog && <StructureCatalog />}
                 </div>
               )}
 

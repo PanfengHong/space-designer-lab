@@ -35,8 +35,8 @@ function WindowItem({
 }) {
   const frameDepth = wallThickness + 0.06;
   const frameWidth = 0.08;
-  const frameColor = monochrome ? '#ffffff' : '#5a5248';
-  const glassColor = monochrome ? '#e0e0e0' : '#8ab5d4';
+  const frameColor = monochrome ? '#ffffff' : '#ece7de';
+  const glassColor = monochrome ? '#e0e6ea' : '#a9cede';
 
   const winW = window.width;
   const winH = window.height;
@@ -122,22 +122,23 @@ function WindowItem({
         <meshStandardMaterial
           color={glassColor}
           transparent
-          opacity={0.2}
-          roughness={0.05}
-          metalness={0}
+          opacity={0.32}
+          roughness={0.06}
+          metalness={0.05}
+          envMapIntensity={1.4}
           side={THREE.DoubleSide}
         />
       </mesh>
-      {/* 玻璃黑色描边 (外轮廓) */}
+      {/* 玻璃描边 (柔和灰蓝, 勾勒轮廓) */}
       <lineSegments>
         <edgesGeometry args={[new THREE.BoxGeometry(winW, winH, 0.03)]} />
-        <lineBasicMaterial color="#1a1a1a" transparent={opacity < 1} opacity={opacity} />
+        <lineBasicMaterial color="#8fa3b0" transparent={opacity < 1} opacity={opacity * 0.8} />
       </lineSegments>
 
-      {/* 外框黑色描边 (整体轮廓) */}
+      {/* 外框描边 (整体轮廓) */}
       <lineSegments>
         <edgesGeometry args={[new THREE.BoxGeometry(holeW + 0.04, holeH + 0.04, frameDepth)]} />
-        <lineBasicMaterial color="#111111" linewidth={1} />
+        <lineBasicMaterial color="#9fb0bc" transparent={opacity < 1} opacity={opacity} />
       </lineSegments>
       {/* 选中高亮 */}
       {isSelected && (

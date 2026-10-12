@@ -1,13 +1,19 @@
 import { useMemo, useEffect, useRef, useCallback } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { Text, Line } from '@react-three/drei';
+import { useShallow } from 'zustand/react/shallow';
 import * as THREE from 'three';
 import { Building } from './Building';
 import { FurnitureGroup } from './Furniture';
+import { FurnitureTransformController } from './FurnitureTransform';
+import { FurnitureToolbar, HudAnchorReporter } from './FurnitureToolbar';
+import { WallLengthHud, WallLengthReporter } from './WallLengthHud';
 import { R3FBridgeBinder } from './DragDrop';
 import { useAppStore } from '../../../store/useAppStore';
 import { useStylePalette } from '../../../constants/styles';
 import { findRoomAt } from '../../../utils/r3fBridge';
+import { buildIndoorColliders, checkIndoorPlacement, type IndoorColliders } from '../../../utils/collision';
+import { resolveStructureDrop, structureGhostSize } from '../../../utils/structurePlacement';
 import { BaseScene } from '../engine/BaseScene';
 import type { ViewMode, CameraPreset, LightingModeConfig, GridConfig, WalkPoint } from '../engine/types';
 import type { ModelLayer, Furniture } from '../../../types';
@@ -51,6 +57,8 @@ interface SceneContentProps {
   showTrafficLines: boolean;
   layers: ModelLayer[];
   monochrome: boolean;
+  /** 占位碰撞体, 由 Scene 统一构建后下发, 避免重复计算 */
+  colliders: IndoorColliders;
 }
 
 /**
@@ -271,7 +279,7 @@ const INDOOR_CAMERA_PRESETS: Record<ViewMode, CameraPreset> = {
 };
 
 const INDOOR_LIGHTING_CONFIGS: Record<string, LightingModeConfig> = {
-  自然光: { ambient: 0.7, ambientColor: '#ffffff', dirIntensity: 0.8, dirColor: '#fffef0', dirPos: [10, 15, 10], dir2Intensity: 0.3, hemiSky: '#c4d4e8', hemiGround: '#d4c8b8', hemiIntensity: 0.5, pointLights: [], fog: null },
+  自然光: { ambient: 0.38, ambientColor: '#f4f1ea', dirIntensity: 1.5, dirColor: '#fff5e2', dirPos: [12, 18, 8], dir2Intensity: 0.45, dir2Color: '#e2ecf5', dir2Pos: [-8, 12, -6], hemiSky: '#dfeaf4', hemiGround: '#e8e2d6', hemiIntensity: 0.65, pointLights: [], fog: null },
   人造光: { ambient: 0.25, ambientColor: '#fff5e6', dirIntensity: 0.05, dirColor: '#ffffff', dirPos: [10, 15, 10], dir2Intensity: 0, hemiSky: '#3a3a3a', hemiGround: '#2a2a2a', hemiIntensity: 0.15, pointLights: [
     { pos: [CENTER_X + 2, 2.4, CENTER_Z + 2], color: '#ffe8cc', intensity: 0.6, dist: 6 },
     { pos: [CENTER_X - 2, 2.4, CENTER_Z - 2], color: '#ffe8cc', intensity: 0.6, dist: 6 },
@@ -308,6 +316,7 @@ function SceneContent({
   showTrafficLines,
   layers,
   monochrome,
+  colliders,
 }: SceneContentProps) {
   const sceneData = useAppStore((s) => s.sceneData);
   const wallThickness = sceneData.wallThickness;
@@ -338,6 +347,12 @@ function SceneContent({
     <>
       <R3FBridgeBinder />
       <SpaceFocusController viewMode={viewMode} activeSpaceId={activeSpaceId} />
+
+      {/* 选中家具的拖拽移动 / 旋转手柄 + 就近工具条锚点 */}
+      <FurnitureTransformController colliders={colliders} />
+      <HudAnchorReporter />
+      {/* 墙体端点拖拽时的实时长度标签 (每帧直写 DOM, 不走 React) */}
+      <WallLengthReporter />
 
       {isWalkthrough && (
         <WalkthroughLook walkthroughIndex={walkthroughIndex} setWalkthroughIndex={setWalkthroughIndex} activeSpaceId={activeSpaceId} />
@@ -416,6 +431,7 @@ function SceneContent({
 }
 
 export function Scene() {
+  // 按字段订阅, 避免拖拽等高频 store 更新触发整个场景树重渲染 (导致高亮框跟不上鼠标)
   const {
     viewMode,
     viewSettings,
@@ -428,9 +444,27 @@ export function Scene() {
     sceneData,
     draggingFurniture,
     setDraggingFurniture,
-    setDragGhostPos,
     addFurniture,
-  } = useAppStore();
+    draggingStructure,
+    setDraggingStructure,
+    addStructure,
+  } = useAppStore(useShallow((s) => ({
+    viewMode: s.viewMode,
+    viewSettings: s.viewSettings,
+    renderMode: s.renderMode,
+    layers: s.layers,
+    designStyleId: s.designStyleId,
+    resetCamera: s.resetCamera,
+    selectFurniture: s.selectFurniture,
+    selectStructure: s.selectStructure,
+    sceneData: s.sceneData,
+    draggingFurniture: s.draggingFurniture,
+    setDraggingFurniture: s.setDraggingFurniture,
+    addFurniture: s.addFurniture,
+    draggingStructure: s.draggingStructure,
+    setDraggingStructure: s.setDraggingStructure,
+    addStructure: s.addStructure,
+  })));
 
   const monochrome = designStyleId === 'base';
 
@@ -439,16 +473,62 @@ export function Scene() {
     switch (viewSettings.lighting) {
       case '夜景': return '#1a2030';
       case '黄昏': return '#6a5040';
-      case '阴天': return '#c8cdd2';
-      default: return '#f0ece4';
+      case '阴天': return '#cfd4d8';
+      default: return '#eef0f1';
     }
   }, [renderMode, viewSettings.lighting]);
 
-  const handleDragOver = useCallback((x: number, z: number) => {
-    setDragGhostPos([x, z]);
-  }, [setDragGhostPos]);
+  // 拖拽高亮框由 BaseScene 的 EngineDragGhost 直接写入 three 对象位置 (不经过 React),
+  // 这里不再写 store, 否则每次 dragover 都会触发全场景重渲染导致高亮框滞后于鼠标
+
+  // 占位碰撞体 (墙体 + 已有家具 + 房间范围) — 仅在场景数据变化时重建
+  const colliders = useMemo(() => buildIndoorColliders(sceneData), [sceneData]);
+
+  // 落点校验: 房间范围 / 家具互压 / 墙体重叠, 返回原因用于画布提示
+  // 建筑结构元素 (墙体/门窗) 走另一套校验: 门窗会返回吸附到墙面后的 snap
+  const dragValidatorDetailed = useCallback(
+    (x: number, z: number) => {
+      if (draggingStructure) {
+        const r = resolveStructureDrop(sceneData, draggingStructure, x, z);
+        return { ok: r.ok, reason: r.reason, snap: r.snap };
+      }
+      if (!draggingFurniture) return { ok: false, reason: '未选中素材' };
+      return checkIndoorPlacement(colliders, draggingFurniture, x, z);
+    },
+    [colliders, draggingFurniture, draggingStructure, sceneData],
+  );
+
+  // 预览框尺寸/偏移: 家具局部 +X = size[2], +Z = size[0] (与落位后的实际占地方向一致)
+  // 淋浴间 (四分之一圆) 从角点向 +X/+Z 展开, 几何体不居中 → 预览框同步偏移
+  const dragGhost = useMemo(() => {
+    const st = draggingStructure;
+    if (st) {
+      return {
+        size: structureGhostSize(st, sceneData.ceilingHeight),
+        offset: null as [number, number] | null,
+      };
+    }
+    const f = draggingFurniture;
+    if (!f) {
+      return {
+        size: null as [number, number, number] | null,
+        offset: null as [number, number] | null,
+      };
+    }
+    const [w, h, d] = f.size;
+    if (f.type === 'shower') {
+      return { size: [w, h, w] as [number, number, number], offset: [w / 2, w / 2] as [number, number] };
+    }
+    return { size: [d, h, w] as [number, number, number], offset: null };
+  }, [draggingFurniture, draggingStructure, sceneData.ceilingHeight]);
 
   const handleDrop = useCallback((x: number, z: number) => {
+    // 结构元素: 复用与预览完全相同的解析, 保证"看到哪里就放到哪里"
+    if (draggingStructure) {
+      const r = resolveStructureDrop(sceneData, draggingStructure, x, z);
+      if (r.ok && r.roomId && r.payload) addStructure(r.roomId, r.payload);
+      return;
+    }
     if (!draggingFurniture) return;
     const roomId = findRoomAt(x, z, sceneData.rooms);
     if (roomId) {
@@ -463,15 +543,14 @@ export function Scene() {
       };
       addFurniture(roomId, newFurniture);
     }
-  }, [draggingFurniture, sceneData.rooms, addFurniture]);
+  }, [draggingFurniture, draggingStructure, sceneData, addFurniture, addStructure]);
 
   const handleDragEnd = useCallback(() => {
     setDraggingFurniture(null);
-    setDragGhostPos(null);
-  }, [setDraggingFurniture, setDragGhostPos]);
-
+    setDraggingStructure(null);
+  }, [setDraggingFurniture, setDraggingStructure]);
   return (
-    <div style={{ width: '100%', height: '100%' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <BaseScene
         center={[CENTER_X, 0, CENTER_Z]}
         onPointerMissed={() => { selectFurniture(null); selectStructure(null); }}
@@ -484,9 +563,9 @@ export function Scene() {
         grid={INDOOR_GRID_CONFIG}
         background={bgColor}
         enableDrag
-        dragSize={draggingFurniture?.size ?? null}
-        dragValidator={(x, z) => !!findRoomAt(x, z, sceneData.rooms)}
-        onDragOver={handleDragOver}
+        dragSize={dragGhost.size}
+        dragOffset={dragGhost.offset}
+        dragValidatorDetailed={dragValidatorDetailed}
         onDrop={handleDrop}
         onDragEnd={handleDragEnd}
       >
@@ -499,8 +578,13 @@ export function Scene() {
           showTrafficLines={viewSettings.showTrafficLines}
           layers={layers}
           monochrome={monochrome}
+          colliders={colliders}
         />
       </BaseScene>
+      {/* 就近工具条: 悬浮于选中家具上方, 位置由 HudAnchorReporter 每帧投影写入 */}
+      <FurnitureToolbar />
+      {/* 墙体端点拖拽时的实时长度标签 */}
+      <WallLengthHud />
     </div>
   );
 }

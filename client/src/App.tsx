@@ -11,6 +11,7 @@ import { ModelManagement } from './components/model/ModelManagement';
 import { CampusManagement } from './components/model/CampusManagement';
 import { useAppStore } from './store/useAppStore';
 import { getModelById } from './api/mockApi';
+import { ThumbnailCaptureHost } from './utils/thumbnailCapture';
 import type { ModelItem } from './types';
 
 function DesignerPage() {
@@ -187,6 +188,8 @@ function App() {
 
   return (
     <BrowserRouter>
+      {/* 全局缩略图捕获宿主: 所有素材/模型缩略图共用一个隐藏 Canvas 离线渲染, 避免多 WebGL context */}
+      <ThumbnailCaptureHost />
       <Routes>
         <Route path="/login" element={isLoggedIn ? <Navigate to="/home" replace /> : <Login />} />
         <Route

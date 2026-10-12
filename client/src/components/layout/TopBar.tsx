@@ -75,6 +75,15 @@ export function TopBar() {
 
       {/* 右侧按钮 */}
       <div className="flex items-center gap-2">
+        
+        <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors">
+          <HelpCircle size={14} />
+          识别说明
+        </button>
+        <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-gray-900 text-white hover:bg-gray-800 rounded-md transition-colors">
+          <Download size={14} />
+          导出模型
+        </button>
         {/* 保存按钮 */}
         <button
           onClick={handleSave}
@@ -94,14 +103,6 @@ export function TopBar() {
           {isDirty && !savedFlash && (
             <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-orange-500 ring-2 ring-white" />
           )}
-        </button>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors">
-          <HelpCircle size={14} />
-          识别说明
-        </button>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-gray-900 text-white hover:bg-gray-800 rounded-md transition-colors">
-          <Download size={14} />
-          导出模型
         </button>
         <div className="w-px h-5 bg-gray-200 mx-1" />
         {/* 用户头像 — 纯展示 */}

@@ -17,6 +17,7 @@ import type {
 import { mockSceneData, getSceneForModel } from '../data/mockScene';
 import { demoOutdoorScene, getOutdoorSceneForModel } from '../data/outdoorScene';
 import { saveSceneForModel, loadSceneForModel } from '../api/mockApi';
+import type { StructurePayload, StructureTemplate } from '../utils/structurePlacement';
 
 interface AppState {
   // 空间列表 (从当前 sceneData.rooms 动态拼装)
@@ -108,6 +109,10 @@ interface AppState {
   draggingFurniture: { type: Furniture['type']; name: string; size: [number, number, number]; color: string } | null;
   setDraggingFurniture: (f: { type: Furniture['type']; name: string; size: [number, number, number]; color: string } | null) => void;
 
+  // 正在从素材库拖拽的建筑结构元素 (墙体/门/窗/飘窗/落地窗)
+  draggingStructure: StructureTemplate | null;
+  setDraggingStructure: (t: StructureTemplate | null) => void;
+
   // 拖拽预览位置 (地板世界坐标 x, z)
   dragGhostPos: [number, number] | null;
   setDragGhostPos: (pos: [number, number] | null) => void;
@@ -118,10 +123,28 @@ interface AppState {
   removeFurniture: (furnitureId: string) => void;
   // 更新家具位置/旋转/尺寸等
   updateFurniture: (furnitureId: string, patch: Partial<Furniture>) => void;
+  // 复制家具 (偏移 0.4m 生成副本并选中)
+  duplicateFurniture: (furnitureId: string) => void;
+
+  // ===== 变换会话 (拖拽移动 / 旋转手柄) =====
+  // 会话期间原家具隐藏, 由 3D 层的 ghost 克隆体实时跟随指针, 松手才提交 (只产生一条历史)
+  transformSession: { id: string; mode: 'move' | 'rotate' } | null;
+  beginTransform: (id: string, mode: 'move' | 'rotate') => void;
+  endTransform: () => void;
+
+  // ===== 撤销 / 重做 (仅室内 sceneData) =====
+  past: SceneData[];
+  future: SceneData[];
+  undo: () => void;
+  redo: () => void;
 
   // 更新建筑结构 (门/窗/飘窗/落地窗/墙)
   // selector 格式: "wall:<roomId>:<id>" / "door:<roomId>:<id>" / "window:<roomId>:<id>" / "bay:<roomId>:<id>" / "french:<roomId>:<id>"
   updateStructure: (selector: string, patch: Record<string, unknown>) => void;
+  // 从素材库拖入的建筑结构元素: 落位后追加到对应房间并选中
+  addStructure: (roomId: string, payload: StructurePayload) => void;
+  // 删除建筑结构元素 (selector 与 updateStructure 同格式)
+  removeStructure: (selector: string) => void;
 
   // ===== 户外空间设计 =====
   // 户外场景数据 (地面结构层 + 空间设计层)
@@ -176,6 +199,43 @@ interface AppState {
   saveCurrentScene: () => Promise<boolean>;
 }
 
+/* ==================== 撤销/重做 辅助 ==================== */
+/** 历史栈上限 (超出丢弃最旧快照) */
+const HISTORY_LIMIT = 80;
+
+/**
+ * 取一份"修改前"的场景历史快照。
+ * sceneData 全程以不可变方式更新 (map/spread), 因此直接存引用即可安全回溯。
+ * 每次记录会清空重做栈 (新分支覆盖旧未来)。
+ */
+function snapshot(state: AppState): { past: SceneData[]; future: SceneData[] } {
+  return {
+    past: [...state.past, state.sceneData].slice(-HISTORY_LIMIT),
+    future: [],
+  };
+}
+
+/** 结构元素 → 选中 selector (与 updateStructure / LeftPanel 的格式保持一致) */
+function structureSelector(roomId: string, payload: StructurePayload): string {
+  switch (payload.kind) {
+    case 'wall':
+      return `wall:${roomId}:${payload.wall.id}`;
+    case 'door':
+      return `door:${roomId}:${payload.door.id}`;
+    case 'window':
+      return `window:${roomId}:${payload.window.id}`;
+    case 'bayWindow':
+      return `bay:${roomId}:${payload.bayWindow.id}`;
+    case 'frenchWindow':
+      return `french:${roomId}:${payload.frenchWindow.id}`;
+  }
+}
+
+/** 场景切换后重建空间列表 */
+function spacesOf(scene: SceneData): Space[] {
+  return scene.rooms.map((r, i) => ({ id: r.id, name: r.name, order: i + 1 }));
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   // 从 mockSceneData.rooms 动态拼装, 保持原有数组顺序作为 order
   spaces: mockSceneData.rooms.map((r, i) => ({ id: r.id, name: r.name, order: i + 1 })),
@@ -186,10 +246,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSceneData: (scene) =>
     set({
       sceneData: scene,
-      spaces: scene.rooms.map((r, i) => ({ id: r.id, name: r.name, order: i + 1 })),
+      spaces: spacesOf(scene),
       activeSpaceId: null,
       selectedFurnitureId: null,
       selectedStructureId: null,
+      // 换场景后历史无意义, 直接清空
+      past: [],
+      future: [],
     }),
 
   designerMode: 'interior',
@@ -279,6 +342,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     showTrafficLines: false,
     showCeiling: false,
     showDoorsOpen: false,
+    showDimensions: false,
     wallCutHeight: 2.5,
     lighting: '自然光照',
     showLabels: false,
@@ -348,11 +412,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeModelId: null,
         activeModelItem: null,
         sceneData: mockSceneData,
-        spaces: mockSceneData.rooms.map((r, i) => ({ id: r.id, name: r.name, order: i + 1 })),
+        spaces: spacesOf(mockSceneData),
         activeSpaceId: null,
         selectedFurnitureId: null,
         selectedStructureId: null,
         isDirty: false,
+        past: [],
+        future: [],
       });
       return;
     }
@@ -362,17 +428,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeModelId: model.id,
       activeModelItem: model,
       sceneData: scene,
-      spaces: scene.rooms.map((r, i) => ({ id: r.id, name: r.name, order: i + 1 })),
+      spaces: spacesOf(scene),
       activeSpaceId: null,
       selectedFurnitureId: null,
       selectedStructureId: null,
       isDirty: false,
+      past: [],
+      future: [],
     });
   },
 
   // 拖拽中的家具模板
   draggingFurniture: null,
   setDraggingFurniture: (f) => set({ draggingFurniture: f }),
+
+  draggingStructure: null,
+  setDraggingStructure: (t) => set({ draggingStructure: t }),
   // 拖拽预览位置 (地板世界坐标 x, z)
   dragGhostPos: null,
   setDragGhostPos: (pos) => {
@@ -384,6 +455,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // 向场景中添加家具 (放到指定房间)
   addFurniture: (roomId, furniture) =>
     set((state) => ({
+      ...snapshot(state),
       sceneData: {
         ...state.sceneData,
         rooms: state.sceneData.rooms.map((r) =>
@@ -398,6 +470,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // 从场景中删除家具
   removeFurniture: (furnitureId) =>
     set((state) => ({
+      ...snapshot(state),
       sceneData: {
         ...state.sceneData,
         rooms: state.sceneData.rooms.map((r) => ({
@@ -412,6 +485,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // 更新家具位置/旋转/尺寸等
   updateFurniture: (furnitureId, patch) =>
     set((state) => ({
+      ...snapshot(state),
       sceneData: {
         ...state.sceneData,
         rooms: state.sceneData.rooms.map((r) => ({
@@ -424,11 +498,75 @@ export const useAppStore = create<AppState>((set, get) => ({
       isDirty: true,
     })),
 
+  // 复制家具: 沿 +X/+Z 偏移 0.4m 生成副本并选中
+  duplicateFurniture: (furnitureId) =>
+    set((state) => {
+      const room = state.sceneData.rooms.find((r) => r.furniture.some((f) => f.id === furnitureId));
+      const src = room?.furniture.find((f) => f.id === furnitureId);
+      if (!room || !src) return {};
+      const copy: Furniture = {
+        ...src,
+        id: `f-copy-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        position: [src.position[0] + 0.4, src.position[1], src.position[2] + 0.4],
+      };
+      return {
+        ...snapshot(state),
+        sceneData: {
+          ...state.sceneData,
+          rooms: state.sceneData.rooms.map((r) =>
+            r.id === room.id ? { ...r, furniture: [...r.furniture, copy] } : r
+          ),
+        },
+        selectedFurnitureId: copy.id,
+        selectedStructureId: null,
+        isDirty: true,
+      };
+    }),
+
+  // ===== 变换会话 =====
+  transformSession: null,
+  beginTransform: (id, mode) => set({ transformSession: { id, mode } }),
+  endTransform: () => set({ transformSession: null }),
+
+  // ===== 撤销 / 重做 =====
+  past: [],
+  future: [],
+  undo: () =>
+    set((state) => {
+      if (state.past.length === 0) return {};
+      const prev = state.past[state.past.length - 1];
+      return {
+        sceneData: prev,
+        spaces: spacesOf(prev),
+        past: state.past.slice(0, -1),
+        future: [...state.future, state.sceneData].slice(-HISTORY_LIMIT),
+        // 回溯后旧选中对象可能已不存在, 直接清空
+        selectedFurnitureId: null,
+        selectedStructureId: null,
+        isDirty: true,
+      };
+    }),
+  redo: () =>
+    set((state) => {
+      if (state.future.length === 0) return {};
+      const next = state.future[state.future.length - 1];
+      return {
+        sceneData: next,
+        spaces: spacesOf(next),
+        future: state.future.slice(0, -1),
+        past: [...state.past, state.sceneData].slice(-HISTORY_LIMIT),
+        selectedFurnitureId: null,
+        selectedStructureId: null,
+        isDirty: true,
+      };
+    }),
+
   // 更新建筑结构 (门/窗/飘窗/落地窗/墙)
   // selector 格式: "wall:<roomId>:<id>" / "door:<roomId>:<id>" / "window:<roomId>:<id>" / "bay:<roomId>:<id>" / "french:<roomId>:<id>"
   updateStructure: (selector, patch) =>
     set((state) => {
       const [type, roomId, id] = selector.split(':');
+      const hist = snapshot(state);
       // 地板: selector = `floor:${roomId}`, patch 可含 floorThickness/floorHeight/ceilingHeight
       if (type === 'floor') {
         const nextRooms = state.sceneData.rooms.map((r) =>
@@ -437,6 +575,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         const floorThickness = (patch.floorThickness as number) ?? state.sceneData.floorThickness;
         const ceilingHeight = (patch.ceilingHeight as number) ?? state.sceneData.ceilingHeight;
         return {
+          ...hist,
           sceneData: {
             ...state.sceneData,
             rooms: nextRooms,
@@ -447,6 +586,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         };
       }
       return {
+        ...hist,
         sceneData: {
           ...state.sceneData,
           rooms: state.sceneData.rooms.map((r) => {
@@ -484,6 +624,73 @@ export const useAppStore = create<AppState>((set, get) => ({
             return r;
           }),
         },
+        isDirty: true,
+      };
+    }),
+
+  // 从素材库拖入的结构元素: 追加到落点所在房间, 并立即选中 (便于用属性面板继续微调)
+  // 门窗还会顺带把目标墙段"拆"出洞口 (opening.segments), 因此墙上的门窗是真正通透的
+  addStructure: (roomId, payload) =>
+    set((state) => ({
+      ...snapshot(state),
+      sceneData: {
+        ...state.sceneData,
+        rooms: state.sceneData.rooms.map((r) => {
+          if (r.id !== roomId) return r;
+          switch (payload.kind) {
+            case 'wall':
+              return { ...r, walls: [...r.walls, payload.wall] };
+            case 'door':
+              return {
+                ...r,
+                walls: r.walls.flatMap((w) => (w.id === payload.opening.wallId ? payload.opening.segments : [w])),
+                doors: [...r.doors, payload.door],
+              };
+            case 'window':
+              return {
+                ...r,
+                walls: r.walls.flatMap((w) => (w.id === payload.opening.wallId ? payload.opening.segments : [w])),
+                windows: [...(r.windows ?? []), payload.window],
+              };
+            case 'bayWindow':
+              return {
+                ...r,
+                walls: r.walls.flatMap((w) => (w.id === payload.opening.wallId ? payload.opening.segments : [w])),
+                bayWindows: [...(r.bayWindows ?? []), payload.bayWindow],
+              };
+            case 'frenchWindow':
+              return {
+                ...r,
+                walls: r.walls.flatMap((w) => (w.id === payload.opening.wallId ? payload.opening.segments : [w])),
+                frenchWindows: [...(r.frenchWindows ?? []), payload.frenchWindow],
+              };
+          }
+        }),
+      },
+      selectedStructureId: structureSelector(roomId, payload),
+      selectedFurnitureId: null,
+      isDirty: true,
+    })),
+
+  // 删除建筑结构元素 (selectors 与 updateStructure 同格式: wall/door/window/bay/french)
+  removeStructure: (selector) =>
+    set((state) => {
+      const [type, roomId, id] = selector.split(':');
+      return {
+        ...snapshot(state),
+        sceneData: {
+          ...state.sceneData,
+          rooms: state.sceneData.rooms.map((r) => {
+            if (r.id !== roomId) return r;
+            if (type === 'wall') return { ...r, walls: r.walls.filter((w) => w.id !== id) };
+            if (type === 'door') return { ...r, doors: r.doors.filter((d) => d.id !== id) };
+            if (type === 'window') return { ...r, windows: (r.windows ?? []).filter((w) => w.id !== id) };
+            if (type === 'bay') return { ...r, bayWindows: (r.bayWindows ?? []).filter((w) => w.id !== id) };
+            if (type === 'french') return { ...r, frenchWindows: (r.frenchWindows ?? []).filter((w) => w.id !== id) };
+            return r;
+          }),
+        },
+        selectedStructureId: state.selectedStructureId === selector ? null : state.selectedStructureId,
         isDirty: true,
       };
     }),

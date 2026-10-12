@@ -1,8 +1,9 @@
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import * as THREE from 'three';
+import { useEffect, useMemo } from 'react';
 import type { ModelItem, Furniture, SceneData } from '../../types';
+import {
+  requestThumbnail,
+  useThumbnailUrl,
+} from '../../utils/thumbnailCapture';
 import { Bed } from '../3D/indoor/furniture/Bed';
 import { Sofa } from '../3D/indoor/furniture/Sofa';
 import { Table } from '../3D/indoor/furniture/Table';
@@ -21,22 +22,73 @@ import { getOutdoorSceneForModel } from '../../data/outdoorScene';
 import type { GroundItem, OutdoorObject, OutdoorSceneData } from '../../types';
 
 /**
- * 视口内挂载检测 — 视口外的缩略图不创建 Canvas, 避免超过浏览器 WebGL context 上限
+ * 模型缩略图 — 由全局捕获宿主离线渲染为透明 PNG (见 utils/thumbnailCapture.tsx),
+ * 不再为每张模型卡片创建独立 WebGL context
  */
-function useInView(rootMargin = '150px') {
-  const ref = useRef<HTMLDivElement>(null);
-  const [inView, setInView] = useState(false);
+export function ModelThumbnail({ item }: { item: ModelItem }) {
+  const key = `model-${item.id}`;
+  const url = useThumbnailUrl(key);
+
+  // 根据家具尺寸计算相机距离 (留出余量, 确保完整显示)
+  const camDist =
+    item.category === 'furniture'
+      ? Math.max(...(item.size ?? [1, 1, 1]), 1) * 1.8 + 1.2
+      : item.category === 'campus'
+        ? 120
+        : 7;
+
+  // 相机 target
+  const target = useMemo<[number, number, number]>(() => {
+    if (item.category === 'furniture') return [0, 0, 0];
+    if (item.category === 'campus') return [0, 2, 0];
+    // 户型: 从 mockScene 提取中心
+    let scene: SceneData;
+    switch (item.type) {
+      case 'one-bed': scene = oneBedroomScene; break;
+      case 'two-bed': scene = twoBedroomScene; break;
+      case 'modern': scene = modernApartmentScene; break;
+      default: scene = mockSceneData;
+    }
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    scene.rooms.forEach((r) => {
+      r.walls.forEach((w) => {
+        minX = Math.min(minX, w.start[0], w.end[0]);
+        maxX = Math.max(maxX, w.start[0], w.end[0]);
+        minZ = Math.min(minZ, w.start[1], w.end[1]);
+        maxZ = Math.max(maxZ, w.start[1], w.end[1]);
+      });
+    });
+    return [(minX + maxX) / 2, 0, (minZ + maxZ) / 2];
+  }, [item]);
+
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      ([entry]) => setInView(entry.isIntersecting),
-      { rootMargin, threshold: 0 }
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [rootMargin]);
-  return { ref, inView };
+    const content =
+      item.category === 'furniture' ? <FurniturePreview item={item} />
+        : item.category === 'campus' ? <CampusPreview item={item} />
+        : <ApartmentPreview item={item} />;
+
+    requestThumbnail({
+      key,
+      camera: { fov: 35, position: [target[0] + camDist * 0.7, camDist * 0.6, target[2] + camDist * 0.7] },
+      target,
+      content,
+    });
+  }, [item, key, camDist, target]);
+
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {url ? (
+        <img
+          src={url}
+          alt={item.name}
+          draggable={false}
+          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+        />
+      ) : (
+        <div className="w-6 h-6 rounded-full border-2 border-gray-200 border-t-gray-400 animate-spin" />
+      )}
+    </div>
+  );
 }
 
 function renderFurniture(data: Furniture) {
@@ -270,72 +322,5 @@ function CampusPreview({ item }: { item: ModelItem }) {
         </group>
       ))}
     </>
-  );
-}
-
-export function ModelThumbnail({ item }: { item: ModelItem }) {
-  const { ref, inView } = useInView();
-  // 根据家具尺寸计算相机距离 (留出余量, 确保完整显示)
-  const camDist =
-    item.category === 'furniture'
-      ? Math.max(...(item.size ?? [1, 1, 1]), 1) * 1.8 + 1.2
-      : item.category === 'campus'
-        ? 120
-        : 7;
-
-  // 户型相机 target
-  const target = useMemo(() => {
-    if (item.category === 'furniture') return [0, 0, 0] as [number, number, number];
-    if (item.category === 'campus') return [0, 2, 0] as [number, number, number];
-    // 户型: 从 mockScene 提取中心
-    let scene: SceneData;
-    switch (item.type) {
-      case 'one-bed': scene = oneBedroomScene; break;
-      case 'two-bed': scene = twoBedroomScene; break;
-      case 'modern': scene = modernApartmentScene; break;
-      default: scene = mockSceneData;
-    }
-    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-    scene.rooms.forEach((r) => {
-      r.walls.forEach((w) => {
-        minX = Math.min(minX, w.start[0], w.end[0]);
-        maxX = Math.max(maxX, w.start[0], w.end[0]);
-        minZ = Math.min(minZ, w.start[1], w.end[1]);
-        maxZ = Math.max(maxZ, w.start[1], w.end[1]);
-      });
-    });
-    return [(minX + maxX) / 2, 0, (minZ + maxZ) / 2] as [number, number, number];
-  }, [item]);
-
-  return (
-    <div ref={ref} style={{ width: '100%', height: '100%' }}>
-      {inView ? (
-        <Canvas
-          dpr={[1, 1]}
-          gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, powerPreference: 'low-power' }}
-          frameloop="demand"
-          camera={{ fov: 35, position: [target[0] + camDist * 0.7, camDist * 0.6, target[2] + camDist * 0.7] }}
-          style={{ width: '100%', height: '100%', background: 'transparent' }}
-        >
-          <Suspense fallback={null}>
-            {item.category === 'furniture'
-              ? <FurniturePreview item={item} />
-              : item.category === 'campus'
-                ? <CampusPreview item={item} />
-                : <ApartmentPreview item={item} />}
-            <OrbitControls
-              enablePan={false}
-              enableZoom={false}
-              autoRotate
-              autoRotateSpeed={1.2}
-              minPolarAngle={Math.PI / 3.5}
-              maxPolarAngle={Math.PI / 2.1}
-              target={target}
-              enabled={false}
-            />
-          </Suspense>
-        </Canvas>
-      ) : null}
-    </div>
   );
 }

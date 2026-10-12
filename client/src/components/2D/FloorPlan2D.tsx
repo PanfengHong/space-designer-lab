@@ -31,6 +31,7 @@ const C = {
 
 export function FloorPlan2D() {
   const showSpaceName = useAppStore((s) => s.viewSettings.showSpaceName);
+  const showDimensions = useAppStore((s) => s.viewSettings.showDimensions);
   const sceneData = useAppStore((s) => s.sceneData);
   const setPixelsPerMeter = useAppStore((s) => s.setPixelsPerMeter);
   const rooms = sceneData.rooms;
@@ -68,7 +69,7 @@ export function FloorPlan2D() {
     });
   });
 
-  const pad = 1.5;
+  const pad = showDimensions ? 2.6 : 1.5;
   const vbX = minX - pad;
   const vbY = minZ - pad;
   const vbW = (maxX - minX) + pad * 2;
@@ -215,6 +216,22 @@ export function FloorPlan2D() {
           ))
         )}
 
+        {/* 尺寸标注: 周长链式标注 (总尺寸 + 逐段净空) */}
+        {showDimensions && (
+          <g style={{ pointerEvents: 'none' }}>
+            <PerimeterDims rooms={rooms} wallT={wallT} minX={minX} maxX={maxX} minZ={minZ} maxZ={maxZ} />
+            {/* 单位说明 */}
+            <text
+              x={vbX + 0.2} y={vbY + 0.42}
+              textAnchor="start" dominantBaseline="middle"
+              fontSize={0.3} fill={C.textDim}
+              style={{ userSelect: 'none' }}
+            >
+              单位: mm
+            </text>
+          </g>
+        )}
+
         {/* 房间名称 */}
         {showSpaceName && rooms.map((room) => {
           const xs = room.walls.flatMap((w) => [w.start[0], w.end[0]]);
@@ -239,6 +256,217 @@ export function FloorPlan2D() {
         })}
       </svg>
     </div>
+  );
+}
+
+/** ===== 尺寸标注 (参考建筑户型图: 每侧 "总尺寸线 + 逐段链式尺寸线") ===== */
+const DIM = {
+  chainOffset: 0.5,  // 链式尺寸线距户型外缘
+  totalOffset: 1.6,  // 总尺寸线距户型外缘
+  font: 0.26,        // 链式标注字号
+  totalFont: 0.34,   // 总尺寸字号
+  tick: 0.07,        // 45° 起止符号半径
+  narrow: 0.7,       // 段长 < 此值 → 文字转竖排并外移一层
+  minLabel: 0.09,    // 段长 < 此值 → 不标数字 (仅符号)
+};
+
+/** 45° 起止符号 (建筑制图风格) */
+function DimTick({ x, y }: { x: number; y: number }) {
+  return (
+    <line
+      x1={x - DIM.tick} y1={y + DIM.tick} x2={x + DIM.tick} y2={y - DIM.tick}
+      stroke={C.textDim} strokeWidth={0.025}
+    />
+  );
+}
+
+/** 标注文字 — 白色描边保证压在家具/地面上仍可读 */
+function DimText({
+  x, y, text, rotate = 0, fontSize = DIM.font,
+}: { x: number; y: number; text: string; rotate?: number; fontSize?: number }) {
+  return (
+    <text
+      x={x} y={y}
+      {...(rotate ? { transform: `rotate(${rotate} ${x} ${y})` } : {})}
+      textAnchor="middle" dominantBaseline="middle"
+      fontSize={fontSize} fontWeight={500} fill={C.text}
+      stroke={C.bg} strokeWidth={0.1}
+      style={{ paintOrder: 'stroke', userSelect: 'none' }}
+    >
+      {text}
+    </text>
+  );
+}
+
+/**
+ * 从房间几何推导某轴上的分段断点 (不取墙体面, 故不会出现墙厚读数):
+ *  - 内部断点: 各房间包围盒的轴线 (相邻房间共享墙只产生一个断点)
+ *  - 端部断点: 取墙体外侧 (户型外缘), 并把外墙轴线点并入端部
+ *    → 房间起止按"墙外侧"计量, 且端部不再残留半墙厚的碎片段
+ */
+function buildChainCoords(
+  rooms: Room[], axis: 'x' | 'z', outerMin: number, outerMax: number, wallT: number,
+): number[] {
+  const raw: number[] = [outerMin, outerMax];
+  for (const room of rooms) {
+    const xs = room.walls.flatMap((w) => [w.start[0], w.end[0]]);
+    const zs = room.walls.flatMap((w) => [w.start[1], w.end[1]]);
+    raw.push(axis === 'x' ? Math.min(...xs) : Math.min(...zs));
+    raw.push(axis === 'x' ? Math.max(...xs) : Math.max(...zs));
+  }
+  const snapped = raw
+    .map((v) => Math.round(v * 200) / 200) // 5mm 粒度
+    .filter((v) => v >= outerMin - 1e-6 && v <= outerMax + 1e-6)
+    .sort((a, b) => a - b);
+
+  const end = wallT / 2 + 0.02; // 外墙轴线离外缘正好半墙厚 → 并入端部
+  const out: number[] = [];
+  for (const v of snapped) {
+    if (!out.length || v - out[out.length - 1] > 0.03) out.push(v);
+  }
+  const inner = out.filter((v) => v - outerMin > end && outerMax - v > end);
+  const coords = [outerMin, ...inner, outerMax];
+  return coords.length >= 2 ? coords : [outerMin, outerMax];
+}
+
+/** 墙厚段 (不标注, 只保留起止符号) */
+function isWallThickness(len: number, wallT: number) {
+  return Math.abs(len - wallT) <= 0.03;
+}
+
+/** 水平链式尺寸线 (dir: -1 在户型上方 / +1 在下方) */
+function HDimChain({
+  coords, y, edge, dir, wallT,
+}: { coords: number[]; y: number; edge: number; dir: -1 | 1; wallT: number }) {
+  const extStart = edge + dir * 0.06;
+  const extEnd = y + dir * 0.1;
+  return (
+    <g>
+      <line x1={coords[0]} y1={y} x2={coords[coords.length - 1]} y2={y} stroke={C.textDim} strokeWidth={0.022} />
+      {coords.map((c, i) => (
+        <g key={`t${i}`}>
+          <DimTick x={c} y={y} />
+          <line x1={c} y1={extStart} x2={c} y2={extEnd} stroke={C.textDim} strokeWidth={0.013} />
+        </g>
+      ))}
+      {coords.slice(0, -1).map((a, i) => {
+        const b = coords[i + 1];
+        const len = b - a;
+        if (len < DIM.minLabel || isWallThickness(len, wallT)) return null;
+        const mid = (a + b) / 2;
+        const rot = len < DIM.narrow;
+        return (
+          <DimText
+            key={`d${i}`} x={mid}
+            y={y + dir * (rot ? 0.62 : 0.26)}
+            text={`${Math.round(len * 1000)}`}
+            rotate={rot ? -90 : 0}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
+/** 垂直链式尺寸线 (dir: -1 在户型左侧 / +1 在右侧) */
+function VDimChain({
+  coords, x, edge, dir, wallT,
+}: { coords: number[]; x: number; edge: number; dir: -1 | 1; wallT: number }) {
+  const extStart = edge + dir * 0.06;
+  const extEnd = x + dir * 0.1;
+  return (
+    <g>
+      <line x1={x} y1={coords[0]} x2={x} y2={coords[coords.length - 1]} stroke={C.textDim} strokeWidth={0.022} />
+      {coords.map((c, i) => (
+        <g key={`t${i}`}>
+          <DimTick x={x} y={c} />
+          <line x1={extStart} y1={c} x2={extEnd} y2={c} stroke={C.textDim} strokeWidth={0.013} />
+        </g>
+      ))}
+      {coords.slice(0, -1).map((a, i) => {
+        const b = coords[i + 1];
+        const len = b - a;
+        if (len < DIM.minLabel || isWallThickness(len, wallT)) return null;
+        const mid = (a + b) / 2;
+        const rot = len < DIM.narrow;
+        return (
+          <DimText
+            key={`d${i}`}
+            x={x + dir * (rot ? 0.62 : 0.26)}
+            y={mid}
+            text={`${Math.round(len * 1000)}`}
+            rotate={rot ? 0 : -90}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
+/**
+ * 户型周长尺寸标注 — 四侧各一组:
+ *   内侧: 逐段链式尺寸线 (墙厚 / 净空交替)
+ *   外侧: 总尺寸线
+ */
+function PerimeterDims({
+  rooms, wallT, minX, maxX, minZ, maxZ,
+}: { rooms: Room[]; wallT: number; minX: number; maxX: number; minZ: number; maxZ: number }) {
+  // 外缘 = 墙中心线包围盒 ± 半墙厚 (墙体按中心线绘制)
+  const oMinX = minX - wallT / 2, oMaxX = maxX + wallT / 2;
+  const oMinZ = minZ - wallT / 2, oMaxZ = maxZ + wallT / 2;
+
+  const xCoords = buildChainCoords(rooms, 'x', oMinX, oMaxX, wallT);
+  const zCoords = buildChainCoords(rooms, 'z', oMinZ, oMaxZ, wallT);
+  const totalW = `${Math.round((oMaxX - oMinX) * 1000)}`;
+  const totalH = `${Math.round((oMaxZ - oMinZ) * 1000)}`;
+
+  const yTopChain = oMinZ - DIM.chainOffset;
+  const yTopTotal = oMinZ - DIM.totalOffset;
+  const yBotChain = oMaxZ + DIM.chainOffset;
+  const yBotTotal = oMaxZ + DIM.totalOffset;
+  const xLeftChain = oMinX - DIM.chainOffset;
+  const xLeftTotal = oMinX - DIM.totalOffset;
+  const xRightChain = oMaxX + DIM.chainOffset;
+  const xRightTotal = oMaxX + DIM.totalOffset;
+
+  return (
+    <g>
+      {/* 上: 总宽 + 链式 */}
+      <HDimChain coords={xCoords} y={yTopChain} edge={oMinZ} dir={-1} wallT={wallT} />
+      <line x1={oMinX} y1={yTopTotal} x2={oMaxX} y2={yTopTotal} stroke={C.textDim} strokeWidth={0.022} />
+      <DimTick x={oMinX} y={yTopTotal} />
+      <DimTick x={oMaxX} y={yTopTotal} />
+      <DimText x={(oMinX + oMaxX) / 2} y={yTopTotal - 0.32} text={totalW} fontSize={DIM.totalFont} />
+      <line x1={oMinX} y1={oMinZ - 0.06} x2={oMinX} y2={yTopTotal - 0.1} stroke={C.textDim} strokeWidth={0.013} />
+      <line x1={oMaxX} y1={oMinZ - 0.06} x2={oMaxX} y2={yTopTotal - 0.1} stroke={C.textDim} strokeWidth={0.013} />
+
+      {/* 下: 总宽 + 链式 */}
+      <HDimChain coords={xCoords} y={yBotChain} edge={oMaxZ} dir={1} wallT={wallT} />
+      <line x1={oMinX} y1={yBotTotal} x2={oMaxX} y2={yBotTotal} stroke={C.textDim} strokeWidth={0.022} />
+      <DimTick x={oMinX} y={yBotTotal} />
+      <DimTick x={oMaxX} y={yBotTotal} />
+      <DimText x={(oMinX + oMaxX) / 2} y={yBotTotal + 0.32} text={totalW} fontSize={DIM.totalFont} />
+      <line x1={oMinX} y1={oMaxZ + 0.06} x2={oMinX} y2={yBotTotal + 0.1} stroke={C.textDim} strokeWidth={0.013} />
+      <line x1={oMaxX} y1={oMaxZ + 0.06} x2={oMaxX} y2={yBotTotal + 0.1} stroke={C.textDim} strokeWidth={0.013} />
+
+      {/* 左: 总深 + 链式 */}
+      <VDimChain coords={zCoords} x={xLeftChain} edge={oMinX} dir={-1} wallT={wallT} />
+      <line x1={xLeftTotal} y1={oMinZ} x2={xLeftTotal} y2={oMaxZ} stroke={C.textDim} strokeWidth={0.022} />
+      <DimTick x={xLeftTotal} y={oMinZ} />
+      <DimTick x={xLeftTotal} y={oMaxZ} />
+      <DimText x={xLeftTotal - 0.32} y={(oMinZ + oMaxZ) / 2} text={totalH} rotate={-90} fontSize={DIM.totalFont} />
+      <line x1={oMinX - 0.06} y1={oMinZ} x2={xLeftTotal - 0.1} y2={oMinZ} stroke={C.textDim} strokeWidth={0.013} />
+      <line x1={oMinX - 0.06} y1={oMaxZ} x2={xLeftTotal - 0.1} y2={oMaxZ} stroke={C.textDim} strokeWidth={0.013} />
+
+      {/* 右: 总深 + 链式 */}
+      <VDimChain coords={zCoords} x={xRightChain} edge={oMaxX} dir={1} wallT={wallT} />
+      <line x1={xRightTotal} y1={oMinZ} x2={xRightTotal} y2={oMaxZ} stroke={C.textDim} strokeWidth={0.022} />
+      <DimTick x={xRightTotal} y={oMinZ} />
+      <DimTick x={xRightTotal} y={oMaxZ} />
+      <DimText x={xRightTotal + 0.32} y={(oMinZ + oMaxZ) / 2} text={totalH} rotate={-90} fontSize={DIM.totalFont} />
+      <line x1={oMaxX + 0.06} y1={oMinZ} x2={xRightTotal + 0.1} y2={oMinZ} stroke={C.textDim} strokeWidth={0.013} />
+      <line x1={oMaxX + 0.06} y1={oMaxZ} x2={xRightTotal + 0.1} y2={oMaxZ} stroke={C.textDim} strokeWidth={0.013} />
+    </g>
   );
 }
 

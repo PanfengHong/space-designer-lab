@@ -34,6 +34,8 @@ function FurnitureItem({ data }: { data: Furniture }) {
   const selectFurniture = useAppStore((s) => s.selectFurniture);
   const selectedId = useAppStore((s) => s.selectedFurnitureId);
   const layers = useAppStore((s) => s.layers);
+  const beginTransform = useAppStore((s) => s.beginTransform);
+  const isTransformTarget = useAppStore((s) => s.transformSession?.id === data.id);
   const isSelected = selectedId === data.id;
   // 室内设计层锁定时, 家具不可选中
   const interiorLocked = layers.find((l) => l.id === 'interior')?.locked ?? false;
@@ -42,6 +44,10 @@ function FurnitureItem({ data }: { data: Furniture }) {
     e.stopPropagation();
     if (interiorLocked) return;
     selectFurniture(data.id);
+    // 左键按下即进入"移动"会话: 拖动时由 FurnitureTransformController 的 ghost 本体
+    // 实时跟随指针 (直接写 three 对象, 不经过 React), 松手才落位 —— 只产生一条历史。
+    // 内嵌件 (灶台/水槽嵌在台面里) 不参与移动: 其占地本就落在母体柜内, 一动必判重叠。
+    if (e.button === 0 && !data.embedded) beginTransform(data.id, 'move');
   };
 
   const handlePointerOver = (e: any) => {
@@ -81,6 +87,7 @@ function FurnitureItem({ data }: { data: Furniture }) {
 
   return (
     <group
+      visible={!isTransformTarget}
       onPointerDown={handlePointerDown}
       onPointerOver={handlePointerOver}
       onPointerOut={handlePointerOut}
@@ -112,7 +119,8 @@ function FurnitureItem({ data }: { data: Furniture }) {
   );
 }
 
-function FurnitureContent({ data }: { data: Furniture }) {
+/** 按类型渲染家具本体 (不含选中高亮/交互), 供 FurnitureItem 与变换 ghost 复用 */
+export function FurnitureContent({ data }: { data: Furniture }) {
   switch (data.type) {
     case 'bed':
       return <Bed data={data} />;

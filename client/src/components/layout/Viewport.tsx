@@ -1,9 +1,10 @@
-import { RotateCcw, Maximize2, Minimize2, ChevronDown, Sun, SlidersHorizontal, Eye, Box, Grid3X3, LayoutGrid, Play, Download, X, Layers } from 'lucide-react';
+import { RotateCcw, Maximize2, Minimize2, ChevronDown, Sun, SlidersHorizontal, Eye, Box, Grid3X3, LayoutGrid, Play, Download, X, Layers, Undo2, Redo2, Copy, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { Scene } from '../3D/indoor/IndoorScene';
 import { FloorPlan2D } from '../2D/FloorPlan2D';
 import { LIGHTING_OPTIONS, LIGHTING_ICONS } from '../../constants/lighting';
+import { useIndoorShortcuts } from '../../hooks/useIndoorShortcuts';
 import type { Furniture } from '../../types';
 
 export function Viewport() {
@@ -22,7 +23,13 @@ export function Viewport() {
     activeSpaceId, spaces, selectSpace,
     sceneData,
     updateFurniture, updateStructure,
+    removeFurniture, duplicateFurniture,
+    removeStructure,
+    undo, redo, past, future,
   } = useAppStore();
+
+  // 快捷键 (Delete 删除 / Esc 取消 / R 旋转 / Ctrl+Z 撤销 / Ctrl+D 复制)
+  useIndoorShortcuts();
 
   const [showSettings, setShowSettings] = useState(true);
 
@@ -146,6 +153,34 @@ export function Viewport() {
         </div>
         {/* 渲染模式切换 */}
         <div className="flex items-center gap-2">
+          {/* 撤销 / 重做 */}
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={undo}
+              disabled={past.length === 0}
+              title="撤销 (Ctrl+Z)"
+              className={`p-1.5 rounded-md transition-colors ${
+                past.length === 0
+                  ? 'text-gray-300 cursor-not-allowed'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              <Undo2 size={14} />
+            </button>
+            <button
+              onClick={redo}
+              disabled={future.length === 0}
+              title="重做 (Ctrl+Shift+Z)"
+              className={`p-1.5 rounded-md transition-colors ${
+                future.length === 0
+                  ? 'text-gray-300 cursor-not-allowed'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              <Redo2 size={14} />
+            </button>
+          </div>
+          <div className="w-px h-5 bg-gray-200" />
           <div className="flex items-center bg-gray-50 rounded-md p-0.5">
             {renderModes.map((mode) => (
               <button
@@ -197,9 +232,10 @@ export function Viewport() {
         </button>
       </div>
 
-      {/* === 右侧悬浮设置面板 === */}
+      {/* === 右侧悬浮面板列: 纵向自动堆叠, 由内容决定高度, 面板之间不再重叠 === */}
+      <div className="absolute top-[104px] right-2 z-30 flex flex-col items-end gap-2 max-h-[calc(100%-8rem)] overflow-y-auto px-2 py-2 select-none">
       {showSettings ? (
-        <div className="absolute top-28 right-4 w-56 bg-white/95 backdrop-blur-md rounded-lg shadow-lg border border-gray-200 z-10 select-none overflow-hidden">
+        <div className="w-56 bg-white/95 backdrop-blur-md rounded-lg shadow-lg border border-gray-200 overflow-hidden">
           {/* 标题栏 */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
             <span className="text-[11px] font-semibold text-gray-700 tracking-wide">视图设置</span>
@@ -216,6 +252,11 @@ export function Viewport() {
               label="空间名称"
               value={viewSettings.showSpaceName}
               onChange={(v) => updateViewSettings('showSpaceName', v)}
+            />
+            <SettingToggle
+              label="尺寸标注"
+              value={!!viewSettings.showDimensions}
+              onChange={(v) => updateViewSettings('showDimensions', v)}
             />
             <SettingToggle
               label="交通动线"
@@ -257,17 +298,16 @@ export function Viewport() {
       ) : (
         <button
           onClick={() => setShowSettings(true)}
-          className="absolute top-28 right-4 w-9 h-9 rounded-lg bg-white/90 backdrop-blur-md shadow-md border border-gray-200 hover:bg-white flex items-center justify-center text-gray-600 transition-colors z-10"
+          className="w-9 h-9 rounded-lg bg-white/90 backdrop-blur-md shadow-md border border-gray-200 hover:bg-white flex items-center justify-center text-gray-600 transition-colors"
           title="视图设置"
         >
           <SlidersHorizontal size={15} />
         </button>
       )}
 
-      {/* === 选中家具属性面板（悬浮于右侧，位于视图设置面板下方） === */}
+      {/* === 选中家具属性面板（在面板列中自动排到视图设置下方） === */}
       {selectedFurniture && (
-        <div className="absolute right-4 z-30 select-none" style={{ top: showSettings ? '370px' : '7rem' }}>
-          <div className="bg-white/95 backdrop-blur-md rounded-lg shadow-lg border border-gray-200 w-64 overflow-hidden">
+        <div className="w-64 bg-white/95 backdrop-blur-md rounded-lg shadow-lg border border-gray-200 overflow-hidden">
             {/* 标题栏 */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50/80">
               <div className="flex items-center gap-1.5">
@@ -366,15 +406,31 @@ export function Viewport() {
                   />
                 </div>
               )}
+
+              {/* 操作: 复制 / 删除 */}
+              <div className="pt-2 border-t border-gray-100 flex items-center gap-1.5">
+                <button
+                  onClick={() => duplicateFurniture(selectedFurniture.id)}
+                  title="复制 (Ctrl+D)"
+                  className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors"
+                >
+                  <Copy size={12} /> 复制
+                </button>
+                <button
+                  onClick={() => removeFurniture(selectedFurniture.id)}
+                  title="删除 (Delete)"
+                  className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] text-red-500 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+                >
+                  <Trash2 size={12} /> 删除
+                </button>
+              </div>
             </div>
           </div>
-        </div>
       )}
 
-      {/* === 选中建筑结构属性面板 === */}
+      {/* === 选中建筑结构属性面板（在面板列中自动排到下方） === */}
       {selectedStructure && (
-        <div className="absolute right-4 z-30 select-none" style={{ top: showSettings ? '370px' : '7rem' }}>
-          <div className="bg-white/95 backdrop-blur-md rounded-lg shadow-lg border border-gray-200 w-64 overflow-hidden">
+        <div className="w-64 bg-white/95 backdrop-blur-md rounded-lg shadow-lg border border-gray-200 overflow-hidden">
             {/* 标题栏 */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50/80">
               <div className="flex items-center gap-1.5">
@@ -666,10 +722,23 @@ export function Viewport() {
                   />
                 </div>
               )}
+
+              {/* 操作: 删除 (地板是房间本身, 不可删) */}
+              {selectedStructureId && !selectedStructureId.startsWith('floor:') && (
+                <div className="pt-2 border-t border-gray-100 flex items-center gap-1.5">
+                  <button
+                    onClick={() => removeStructure(selectedStructureId)}
+                    title="删除 (Delete)"
+                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] text-red-500 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+                  >
+                    <Trash2 size={12} /> 删除
+                  </button>
+                </div>
+              )}
             </div>
           </div>
-        </div>
       )}
+      </div>
 
       {/* === 选中空间信息面板（悬浮于左下角） === */}
       {activeSpaceId && (() => {

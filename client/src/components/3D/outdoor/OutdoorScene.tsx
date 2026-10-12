@@ -1,6 +1,7 @@
 import { useMemo, useEffect, useRef, useCallback } from 'react';
 import { useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
+import { useShallow } from 'zustand/react/shallow';
 import * as THREE from 'three';
 import { useAppStore } from '../../../store/useAppStore';
 import { R3FBridgeBinder } from '../indoor/DragDrop';
@@ -9,6 +10,7 @@ import type { ViewMode, CameraPreset, LightingModeConfig, GridConfig, WalkPoint 
 import { GroundItemsGroup, GroundItemContent } from './GroundItems';
 import { OutdoorObjectsGroup, OutdoorObjectContent } from './OutdoorObjects';
 import { useOutdoorPalette } from '../../../constants/outdoorStyles';
+import { buildOutdoorColliders, checkOutdoorPlacement } from '../../../utils/collision';
 import type { ModelLayer, GroundItem, OutdoorObject, GroundItemType, OutdoorObjectType } from '../../../types';
 
 // 户外场景中心
@@ -189,6 +191,7 @@ function OutdoorSceneContent({ viewMode, layers, showLabels }: { viewMode: strin
 }
 
 export function OutdoorScene() {
+  // 按字段订阅, 避免拖拽等高频 store 更新触发整个场景树重渲染 (导致高亮框跟不上鼠标)
   const {
     viewMode,
     viewSettings,
@@ -199,10 +202,21 @@ export function OutdoorScene() {
     outdoorSceneData,
     draggingOutdoor,
     setDraggingOutdoor,
-    setOutdoorDragGhostPos,
     addGroundItem,
     addOutdoorObject,
-  } = useAppStore();
+  } = useAppStore(useShallow((s) => ({
+    viewMode: s.viewMode,
+    viewSettings: s.viewSettings,
+    layers: s.layers,
+    resetCamera: s.resetCamera,
+    selectGround: s.selectGround,
+    selectOutdoorObject: s.selectOutdoorObject,
+    outdoorSceneData: s.outdoorSceneData,
+    draggingOutdoor: s.draggingOutdoor,
+    setDraggingOutdoor: s.setDraggingOutdoor,
+    addGroundItem: s.addGroundItem,
+    addOutdoorObject: s.addOutdoorObject,
+  })));
 
   const bgColor = useMemo(() => {
     switch (viewSettings.lighting) {
@@ -213,9 +227,20 @@ export function OutdoorScene() {
     }
   }, [viewSettings.lighting]);
 
-  const handleDragOver = useCallback((x: number, z: number) => {
-    setOutdoorDragGhostPos([x, z]);
-  }, [setOutdoorDragGhostPos]);
+  // 拖拽高亮框由 BaseScene 的 EngineDragGhost 直接写入 three 对象位置 (不经过 React),
+  // 这里不再写 store, 否则每次 dragover 都会触发全场景重渲染导致高亮框滞后于鼠标
+
+  // 占位碰撞体 (设计区域基座 + 已有空间对象) — 仅在场景数据变化时重建
+  const colliders = useMemo(() => buildOutdoorColliders(outdoorSceneData), [outdoorSceneData]);
+
+  // 落点校验: 必须落在设计区域内; 空间对象之间不可重叠 (地面结构允许叠放)
+  const dragValidatorDetailed = useCallback(
+    (x: number, z: number) => {
+      if (!draggingOutdoor) return { ok: false, reason: '未选中素材' };
+      return checkOutdoorPlacement(colliders, draggingOutdoor, x, z);
+    },
+    [colliders, draggingOutdoor],
+  );
 
   const handleDrop = useCallback((x: number, z: number) => {
     if (!draggingOutdoor) return;
@@ -250,8 +275,7 @@ export function OutdoorScene() {
 
   const handleDragEnd = useCallback(() => {
     setDraggingOutdoor(null);
-    setOutdoorDragGhostPos(null);
-  }, [setDraggingOutdoor, setOutdoorDragGhostPos]);
+  }, [setDraggingOutdoor]);
 
   return (
     <div style={{ width: '100%', height: '100%' }}>
@@ -268,8 +292,7 @@ export function OutdoorScene() {
         background={bgColor}
         enableDrag
         dragSize={draggingOutdoor?.size ?? null}
-        dragValidator={(x, z) => isInsideGround(x, z, outdoorSceneData.ground)}
-        onDragOver={handleDragOver}
+        dragValidatorDetailed={dragValidatorDetailed}
         onDrop={handleDrop}
         onDragEnd={handleDragEnd}
       >

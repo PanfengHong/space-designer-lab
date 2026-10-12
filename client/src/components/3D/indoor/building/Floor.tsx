@@ -68,7 +68,8 @@ export function Floor({
         <boxGeometry args={[width, thickness, depth]} />
         <meshStandardMaterial
           color={color}
-          roughness={0.85}
+          roughness={0.55}
+          envMapIntensity={0.45}
         />
       </mesh>
       {/* 选中高亮 */}

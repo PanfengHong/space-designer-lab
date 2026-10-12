@@ -37,12 +37,12 @@ export const oneBedroomScene: SceneData = {
       ],
       furniture: [
         // 卧室区 (左上)
-        { id: 'f-o1', name: '双人床', position: [1.2, 0, 1.5], rotation: 90, size: [1.8, 0.45, 2.0], type: 'bed', color: '#e8e0d4' },
-        { id: 'f-o2', name: '床头柜', position: [0.4, 0, 0.5], rotation: 0, size: [0.5, 0.5, 0.45], type: 'cabinet', color: '#8b7355' },
+        { id: 'f-o1', name: '双人床', position: [1.45, 0, 1.1], rotation: 90, size: [1.8, 0.45, 2.0], type: 'bed', color: '#e8e0d4' },
+        { id: 'f-o2', name: '床头柜', position: [0.325, 0, 0.35], rotation: 0, size: [0.5, 0.5, 0.45], type: 'cabinet', color: '#8b7355' },
         // 客厅区 (右下)
-        { id: 'f-o3', name: '沙发', position: [4.5, 0, 4.0], rotation: 180, size: [2.0, 0.85, 0.9], type: 'sofa', color: '#d4c5b0' },
-        { id: 'f-o4', name: '茶几', position: [4.5, 0, 2.8], rotation: 0, size: [1.0, 0.45, 0.6], type: 'table', color: '#5c4033' },
-        { id: 'f-o5', name: '电视柜', position: [5.7, 0, 2.5], rotation: 270, size: [1.8, 0.4, 0.45], type: 'cabinet', color: '#3d3d3d' },
+        { id: 'f-o3', name: '沙发', position: [4.5, 0, 3.9], rotation: 180, size: [2.0, 0.85, 0.9], type: 'sofa', color: '#d4c5b0' },
+        { id: 'f-o4', name: '茶几', position: [4.5, 0, 2.4], rotation: 0, size: [1.0, 0.45, 0.6], type: 'table', color: '#5c4033' },
+        { id: 'f-o5', name: '电视柜', position: [5.675, 0, 2.5], rotation: 0, size: [1.8, 0.4, 0.45], type: 'cabinet', color: '#3d3d3d' },
         // 厨房区 (右上)
         { id: 'f-o6', name: '冰箱', position: [5.5, 0, 0.5], rotation: 270, size: [0.7, 1.8, 0.65], type: 'fridge', color: '#e0e0e0' },
       ],
@@ -70,9 +70,9 @@ export const oneBedroomScene: SceneData = {
       bayWindows: [],
       frenchWindows: [],
       furniture: [
-        { id: 'f-ob1', name: '淋浴', position: [0.6, 0, 5.6], rotation: 0, size: [1.2, 2.0, 1.0], type: 'shower', color: '#a8d0e6', shape: 'rect' },
-        { id: 'f-ob2', name: '马桶', position: [1.6, 0, 6.5], rotation: 180, size: [0.4, 0.8, 0.65], type: 'toilet', color: '#fafafa' },
-        { id: 'f-ob3', name: '洗手台', position: [0.5, 0, 6.8], rotation: 90, size: [0.7, 0.85, 0.5], type: 'sink', color: '#ffffff' },
+        { id: 'f-ob1', name: '淋浴', position: [0.1, 0, 5.1], rotation: 0, size: [1.2, 2.0, 1.0], type: 'shower', color: '#a8d0e6', shape: 'rect' },
+        { id: 'f-ob2', name: '马桶', position: [1.575, 0, 6.5], rotation: 180, size: [0.4, 0.8, 0.65], type: 'toilet', color: '#fafafa' },
+        { id: 'f-ob3', name: '洗手台', position: [0.5, 0, 6.65], rotation: 90, size: [0.7, 0.85, 0.5], type: 'sink', color: '#ffffff' },
       ],
     },
   ],
@@ -115,8 +115,8 @@ export const twoBedroomScene: SceneData = {
       ],
       furniture: [
         { id: 'f-tl1', name: '沙发', position: [3, 0, 4.5], rotation: 180, size: [2.4, 0.85, 0.9], type: 'sofa', color: '#d4c5b0' },
-        { id: 'f-tl2', name: '茶几', position: [3, 0, 3.5], rotation: 0, size: [1.2, 0.45, 0.7], type: 'table', color: '#5c4033' },
-        { id: 'f-tl3', name: '电视柜', position: [2.3, 0, 3.5], rotation: 90, size: [2.0, 0.4, 0.45], type: 'cabinet', color: '#3d3d3d' },
+        { id: 'f-tl2', name: '茶几', position: [3, 0, 2.7], rotation: 0, size: [1.2, 0.45, 0.7], type: 'table', color: '#5c4033' },
+        { id: 'f-tl3', name: '电视柜', position: [2.325, 0, 3.5], rotation: 0, size: [2.0, 0.4, 0.45], type: 'cabinet', color: '#3d3d3d' },
       ],
     },
     // 主卧 4m x 4m
@@ -140,9 +140,9 @@ export const twoBedroomScene: SceneData = {
       ],
       frenchWindows: [],
       furniture: [
-        { id: 'f-tmb1', name: '双人床', position: [1, 0, 4], rotation: 90, size: [1.8, 0.45, 2.0], type: 'bed', color: '#e8e0d4' },
-        { id: 'f-tmb2', name: '衣柜', position: [0.3, 0, 2.5], rotation: 0, size: [2.0, 2.45, 0.5], type: 'cabinet', color: '#d4c5b0' },
-        { id: 'f-tmb3', name: '床头柜', position: [1.7, 0, 2.5], rotation: 0, size: [0.5, 0.5, 0.45], type: 'cabinet', color: '#8b7355' },
+        { id: 'f-tmb1', name: '双人床', position: [1, 0, 4.9], rotation: 90, size: [1.8, 0.45, 2.0], type: 'bed', color: '#e8e0d4' },
+        { id: 'f-tmb2', name: '衣柜', position: [0.35, 0, 3], rotation: 0, size: [1.8, 2.45, 0.5], type: 'cabinet', color: '#d4c5b0' },
+        { id: 'f-tmb3', name: '床头柜', position: [1.675, 0, 2.5], rotation: 0, size: [0.5, 0.5, 0.45], type: 'cabinet', color: '#8b7355' },
       ],
     },
     // 次卧/书房 2m x 3m
@@ -168,8 +168,8 @@ export const twoBedroomScene: SceneData = {
       bayWindows: [],
       frenchWindows: [],
       furniture: [
-        { id: 'f-tsb1', name: '单人床', position: [7.2, 0, 2.3], rotation: 90, size: [1.2, 0.45, 2.0], type: 'bed', color: '#d4c5b0' },
-        { id: 'f-tsb2', name: '书桌', position: [6.5, 0, 0.3], rotation: 0, size: [1.2, 0.75, 0.6], type: 'table', color: '#5c4033' },
+        { id: 'f-tsb1', name: '单人床', position: [7.3, 0, 1.9], rotation: 90, size: [1.2, 0.45, 2.0], type: 'bed', color: '#d4c5b0' },
+        { id: 'f-tsb2', name: '书桌', position: [6.4, 0, 0.7], rotation: 0, size: [1.2, 0.75, 0.6], type: 'table', color: '#5c4033' },
       ],
     },
     // 厨房 2m x 3m
@@ -181,28 +181,28 @@ export const twoBedroomScene: SceneData = {
       tags: ['两居', '厨房'],
       floorHeight: 0,
       walls: [
-        { id: 'w-tk1', start: [6, 0], end: [8, 0], height: 2.8 }, // 北墙
-        { id: 'w-tk2', start: [8, 0], end: [8, 2], height: 2.8 }, // 东墙
-        { id: 'w-tk3', start: [8, 2], end: [6, 2], height: 2.8 }, // 南墙
-        { id: 'w-tk4', start: [6, 2], end: [6, 0], height: 2.8, cutout: { start: 0.5, end: 1.4, sill: 0, top: 2.1 } }, // 西墙 (通客厅门洞)
+        { id: 'w-tk1', start: [6, 3], end: [8, 3], height: 2.8 }, // 北墙
+        { id: 'w-tk2', start: [8, 3], end: [8, 6], height: 2.8 }, // 东墙
+        { id: 'w-tk3', start: [8, 6], end: [6, 6], height: 2.8 }, // 南墙
+        { id: 'w-tk4', start: [6, 6], end: [6, 3], height: 2.8, cutout: { start: 0.1, end: 1, sill: 0, top: 2.1 } }, // 西墙 (通客厅门洞)
       ],
       doors: [
-        { id: 'd-tk1', position: [6, 0, 1], width: 0.8, height: 2.1, rotation: 90, hingeSide: 'left' },
+        { id: 'd-tk1', position: [6, 0, 5.45], width: 0.8, height: 2.1, rotation: 90, hingeSide: 'left' },
       ],
       windows: [
-        { id: 'win-tk1', position: [8, 0, 1], width: 1.2, height: 1.5, sill: 0.9, rotation: 90 },
+        { id: 'win-tk1', position: [8, 0, 4.5], width: 1.2, height: 1.5, sill: 0.9, rotation: 90 },
       ],
       bayWindows: [],
       frenchWindows: [],
       furniture: [
         // 北橱柜 (沿北墙)
-        { id: 'f-tk-cab', name: '橱柜', position: [7, 0, 0.3], rotation: 270, size: [1.8, 0.9, 0.6], type: 'cabinet', color: '#f5f5f5' },
+        { id: 'f-tk-cab', name: '橱柜', position: [7, 0, 3.4], rotation: 270, size: [1.8, 0.9, 0.6], type: 'cabinet', color: '#f5f5f5' },
         // 灶台 (嵌入北橱柜左侧)
-        { id: 'f-tk-stove', name: '灶台', position: [6.6, 0.82, 0.3], rotation: 270, size: [0.7, 0.08, 0.5], type: 'stove', color: '#1a1a1a' },
+        { id: 'f-tk-stove', name: '灶台', position: [6.6, 0.82, 3.4], rotation: 270, size: [0.7, 0.08, 0.5], type: 'stove', color: '#1a1a1a', embedded: true },
         // 厨房水槽 (嵌入北橱柜右侧)
-        { id: 'f-tk-sink', name: '厨房水槽', position: [7.5, 0.9, 0.3], rotation: 270, size: [0.5, 0.9, 0.5], type: 'sink', color: '#ffffff', embedded: true },
+        { id: 'f-tk-sink', name: '厨房水槽', position: [7.5, 0.9, 3.4], rotation: 270, size: [0.5, 0.9, 0.5], type: 'sink', color: '#ffffff', embedded: true },
         // 冰箱 (靠东墙)
-        { id: 'f-tk1', name: '冰箱', position: [7.6, 0, 1.5], rotation: 270, size: [0.7, 1.8, 0.65], type: 'fridge', color: '#e0e0e0' },
+        { id: 'f-tk1', name: '冰箱', position: [7.55, 0, 4.5], rotation: 270, size: [0.7, 1.8, 0.65], type: 'fridge', color: '#e0e0e0' },
       ],
     },
     // 卫生间 2m x 2m
@@ -226,9 +226,9 @@ export const twoBedroomScene: SceneData = {
       bayWindows: [],
       frenchWindows: [],
       furniture: [
-        { id: 'f-tbt1', name: '淋浴', position: [0.6, 0, 0.6], rotation: 0, size: [1.0, 2.0, 1.0], type: 'shower', color: '#a8d0e6', shape: 'rect' },
-        { id: 'f-tbt2', name: '马桶', position: [1.7, 0, 1.6], rotation: 180, size: [0.4, 0.8, 0.65], type: 'toilet', color: '#fafafa' },
-        { id: 'f-tbt3', name: '洗手台', position: [0.5, 0, 1.8], rotation: 90, size: [0.7, 0.85, 0.5], type: 'sink', color: '#ffffff' },
+        { id: 'f-tbt1', name: '淋浴', position: [0.1, 0, 0.1], rotation: 0, size: [1.0, 2.0, 1.0], type: 'shower', color: '#a8d0e6', shape: 'rect' },
+        { id: 'f-tbt2', name: '马桶', position: [1.575, 0, 1.6], rotation: 180, size: [0.4, 0.8, 0.65], type: 'toilet', color: '#fafafa' },
+        { id: 'f-tbt3', name: '洗手台', position: [0.5, 0, 1.65], rotation: 90, size: [0.7, 0.85, 0.5], type: 'sink', color: '#ffffff' },
       ],
     },
   ],
@@ -291,9 +291,9 @@ export const mockSceneData: SceneData = {
       windows: [{ id: 'win-bb1', position: [-1.0, 1.5, 5.8], width: 0.4, height: 0.7, rotation: 90, style: 'sliding' }],
       furniture: [
         // 淋浴间: 左上角, 贴北墙(z=4.3)+西墙(x=-1.0), 四分之一圆, 半径1.2m
-        { id: 'f-bb3', name: '淋浴间', position: [-1.0, 0, 4.3], rotation: 0, size: [1.2, 2.0, 0], type: 'shower', shape: 'quarter', color: '#a8d0e6' },
+        { id: 'f-bb3', name: '淋浴间', position: [-0.9, 0, 4.4], rotation: 0, size: [1.2, 2.0, 0], type: 'shower', shape: 'quarter', color: '#a8d0e6' },
         // 马桶: 左下角, 贴西墙(x=-1.0)+南墙(z=6.2), 正面朝北 (rotation 180)
-        { id: 'f-bb1', name: '马桶', position: [-0.6, 0, 5.8], rotation: 90, size: [0.4, 0.8, 0.65], type: 'toilet', color: '#fafafa' },
+        { id: 'f-bb1', name: '马桶', position: [0.55, 0, 5.775], rotation: 90, size: [0.4, 0.8, 0.65], type: 'toilet', color: '#fafafa' },
         // 洗手台: 右上角, 贴北墙(z=4.3)+东墙(x=1.7)
         { id: 'f-bb2', name: '洗手台', position: [1.15, 0, 4.7], rotation: 90, size: [0.7, 0.85, 0.5], type: 'sink', color: '#ffffff' },
       ],
@@ -351,17 +351,17 @@ export const mockSceneData: SceneData = {
       windows: [{ id: 'win-k1', position: [5.25, 0.9, 0], width: 2.2, height: 1.4, style: 'sliding' }],
       furniture: [
         // 北橱柜: 满3.5m宽, 紧贴东西墙
-        { id: 'f-k1', name: '北橱柜', position: [5.25, 0, 0.3], rotation: 270, size: [3.5, 0.9, 0.6], type: 'cabinet', color: '#f5f5f5' },
+        { id: 'f-k1', name: '北橱柜', position: [5.25, 0, 0.4], rotation: 270, size: [3.3, 0.9, 0.6], type: 'cabinet', color: '#f5f5f5' },
         // 灶台 (嵌入北橱柜, 灶面与台面齐平 y=0.9)
-        { id: 'f-k-stove', name: '灶台', position: [4.5, 0.82, 0.3], rotation: 270, size: [0.8, 0.08, 0.5], type: 'stove', color: '#1a1a1a' },
+        { id: 'f-k-stove', name: '灶台', position: [4.5, 0.82, 0.4], rotation: 270, size: [0.8, 0.08, 0.5], type: 'stove', color: '#1a1a1a', embedded: true },
         // 西橱柜: 2.0m, z:0.6~2.6 紧贴南墙
-        { id: 'f-k3', name: '西橱柜', position: [3.8, 0, 1.6], rotation: 0, size: [2.0, 0.9, 0.6], type: 'cabinet', color: '#f5f5f5' },
+        { id: 'f-k3', name: '西橱柜', position: [3.9, 0, 1.6], rotation: 0, size: [1.8, 0.9, 0.6], type: 'cabinet', color: '#f5f5f5' },
         // 厨房洗手池 (嵌入西橱柜, 盆沿与台面齐平 y=0.9)
-        { id: 'f-k-sink', name: '厨房水槽', position: [3.85, 0.9, 1.2], rotation: 180, size: [0.5, 0.9, 0.5], type: 'sink', color: '#ffffff', embedded: true },
+        { id: 'f-k-sink', name: '厨房水槽', position: [3.9, 0.9, 1.2], rotation: 180, size: [0.5, 0.9, 0.5], type: 'sink', color: '#ffffff', embedded: true },
         // 东橱柜: 1.25m, z:0.6~1.85
-        { id: 'f-k2', name: '东橱柜', position: [6.7, 0, 1.225], rotation: 180, size: [1.25, 0.9, 0.6], type: 'cabinet', color: '#f5f5f5' },
+        { id: 'f-k2', name: '东橱柜', position: [6.6, 0, 1.225], rotation: 180, size: [1.05, 0.9, 0.6], type: 'cabinet', color: '#f5f5f5' },
         // 冰箱: 0.75m, z:1.85~2.6 紧贴南墙; 东橱柜1.25+冰箱0.75=西橱柜2.0
-        { id: 'f-k4', name: '冰箱', position: [6.675, 0, 2.225], rotation: 180, size: [0.75, 1.85, 0.65], type: 'fridge', color: '#e0e0e0' },
+        { id: 'f-k4', name: '冰箱', position: [6.575, 0, 2.125], rotation: 180, size: [0.75, 1.85, 0.65], type: 'fridge', color: '#e0e0e0' },
       ],
     },
 
@@ -384,7 +384,7 @@ export const mockSceneData: SceneData = {
       windows: [{ id: 'win-ba1', position: [8.25, 1.0, 0], width: 1.2, height: 1.0 }],
       furniture: [
         // 淋浴间: 长方形, 占满卫生间横向全宽 (x:7.0~9.5), 靠北墙, 长边为玻璃
-        { id: 'f-ba3', name: '淋浴间', position: [7.0, 0, 0], rotation: 0, size: [2.5, 1.8, 1.0], type: 'shower', shape: 'rect', color: '#a8d0e6' },
+        { id: 'f-ba3', name: '淋浴间', position: [7.1, 0, 0.1], rotation: 0, size: [2.3, 1.8, 1], type: 'shower', shape: 'rect', color: '#a8d0e6' },
         // 马桶: 紧贴东墙 (x=9.5), 水箱靠东墙, 正面朝西 (rotation 270)
         { id: 'f-ba5', name: '马桶', position: [9.05, 0, 1.6], rotation: 270, size: [0.45, 0.8, 0.7], type: 'toilet', color: '#fafafa' },
         // 洗手台: 紧贴东墙 (x=9.5), 马桶南侧
@@ -474,7 +474,7 @@ export const mockSceneData: SceneData = {
         { id: 'f-l2', name: '单人沙发', position: [5.25, 0, 8.0], rotation: -90, size: [0.9, 0.85, 0.8], type: 'sofa', color: '#c8b8a0' },
         { id: 'f-l3', name: '茶几', position: [5.25, 0, 9.3], rotation: 0, size: [1.3, 0.45, 0.75], type: 'table', color: '#5c4033' },
         { id: 'f-l4', name: '电视柜', position: [6.575, 0, 9.1], rotation: 0, size: [2.2, 0.4, 0.45], type: 'cabinet', color: '#3d3d3d' },
-        { id: 'f-l5', name: '电视', position: [6.575, 1.1, 9.05], rotation: 0, size: [1.4, 0.85, 0.05], type: 'appliance', color: '#1a1a1a' },
+        { id: 'f-l5', name: '电视', position: [6.575, 1.1, 9.05], rotation: 0, size: [1.4, 0.85, 0.05], type: 'appliance', color: '#1a1a1a', embedded: true },
         { id: 'f-l6', name: '落地灯', position: [4.05, 0, 7.0], rotation: 0, size: [0.4, 1.6, 0.4], type: 'decor', color: '#e8e0d4' },
       ],
     },
@@ -569,7 +569,7 @@ export const modernApartmentScene: SceneData = {
       frenchWindows: [],
       furniture: [
         { id: 'f-b1-bed', name: '单人床', position: [2, 0, 0.7], rotation: 90, size: [1.8, 0.45, 2.0], type: 'bed', color: '#e8e0d4' },
-        { id: 'f-b1-ns1', name: '床头柜', position: [1.4, 0, -0.5], rotation: 0, size: [0.5, 0.5, 0.45], type: 'cabinet', color: '#8b7355' },
+        { id: 'f-b1-ns1', name: '床头柜', position: [1.4, 0, -0.65], rotation: 0, size: [0.5, 0.5, 0.45], type: 'cabinet', color: '#8b7355' },
         { id: 'f-b1-ns2', name: '床头柜', position: [1.4, 0, 1.95], rotation: 0, size: [0.5, 0.5, 0.45], type: 'cabinet', color: '#8b7355' },
         { id: 'f-b1-r', name: '衣柜', position: [2.2, 0, 2.55], rotation: 90, size: [2.0, 2.4, 0.6], type: 'cabinet', color: '#d4c5b0' },
       ],
@@ -596,9 +596,9 @@ export const modernApartmentScene: SceneData = {
       bayWindows: [],
       frenchWindows: [],
       furniture: [
-        { id: 'f-bt-shower', name: '淋浴', position: [5, 0, 0.4], rotation: 0, size: [1.95, 1.8, 0.9], type: 'shower', color: '#a8d0e6', shape: 'rect' },
+        { id: 'f-bt-shower', name: '淋浴', position: [5.1, 0, 0.4], rotation: 0, size: [1.8, 1.8, 0.9], type: 'shower', color: '#a8d0e6', shape: 'rect' },
         { id: 'f-bt-toilet', name: '马桶', position: [6.6, 0, 1.9], rotation: 270, size: [0.4, 0.8, 0.65], type: 'toilet', color: '#fafafa' },
-        { id: 'f-bt-sink', name: '洗手台', position: [6.7, 0, 3.8], rotation: 0, size: [1.05, 0.85, 0.45], type: 'sink', color: '#ffffff' },
+        { id: 'f-bt-sink', name: '洗手台', position: [6.675, 0, 3.675], rotation: 0, size: [1.05, 0.85, 0.45], type: 'sink', color: '#ffffff' },
       ],
     },
 
@@ -627,17 +627,17 @@ export const modernApartmentScene: SceneData = {
       frenchWindows: [],
       furniture: [
         // 北橱柜
-        { id: 'f-k-ncab', name: '北橱柜', position: [8.25, 0, 1.3], rotation: 270, size: [2.5, 0.9, 0.6], type: 'cabinet', color: '#f5f5f5' },
+        { id: 'f-k-ncab', name: '北橱柜', position: [8.3, 0, 1.3], rotation: 270, size: [2.4, 0.9, 0.6], type: 'cabinet', color: '#f5f5f5' },
         // 灶台 (嵌入北橱柜)
-        { id: 'f-k-stove', name: '灶台', position: [7.4, 0.82, 2.5], rotation: 0, size: [1.2, 0.08, 0.5], type: 'stove', color: '#1a1a1a' },
+        { id: 'f-k-stove', name: '灶台', position: [7.4, 0.82, 2.5], rotation: 0, size: [1.2, 0.08, 0.5], type: 'stove', color: '#1a1a1a', embedded: true },
         // 水槽 (嵌入北橱柜)
         { id: 'f-k-sink', name: '厨房水槽', position: [8.8, 0.9, 1.3], rotation: 90, size: [0.5, 0.9, 0.5], type: 'sink', color: '#ffffff', embedded: true },
         // 西橱柜
         { id: 'f-k-wcab', name: '西橱柜', position: [7.4, 0, 2.6], rotation: 0, size: [2.0, 0.9, 0.6], type: 'cabinet', color: '#f5f5f5' },
         // 南橱柜
-        { id: 'f-k-scab', name: '南橱柜', position: [7.9, 0, 3.9], rotation: 90, size: [1.65, 0.9, 0.6], type: 'cabinet', color: '#f5f5f5' },
+        { id: 'f-k-scab', name: '南橱柜', position: [7.925, 0, 3.9], rotation: 90, size: [1.65, 0.9, 0.6], type: 'cabinet', color: '#f5f5f5' },
         // 冰箱 (贴东墙)
-        { id: 'f-k-fridge', name: '冰箱', position: [9.1, 0, 3.9], rotation: 90, size: [0.7, 1.85, 0.65], type: 'fridge', color: '#e0e0e0' },
+        { id: 'f-k-fridge', name: '冰箱', position: [9.1, 0, 3.875], rotation: 90, size: [0.7, 1.85, 0.65], type: 'fridge', color: '#e0e0e0' },
       ],
     },
 
@@ -774,7 +774,7 @@ export const modernApartmentScene: SceneData = {
       bayWindows: [],
       frenchWindows: [],
       furniture: [
-        { id: 'f-mbt-shower', name: '淋浴', position: [0, 0, 3.1], rotation: 0, size: [1.1, 1.8, 2.3], type: 'shower', color: '#a8d0e6', shape: 'rect' },
+        { id: 'f-mbt-shower', name: '淋浴', position: [0.1, 0, 3.1], rotation: 0, size: [1, 1.8, 2.2], type: 'shower', color: '#a8d0e6', shape: 'rect' },
         { id: 'f-mbt-toilet', name: '马桶', position: [1.7, 0, 3.4], rotation: 0, size: [0.4, 0.8, 0.65], type: 'toilet', color: '#fafafa' },
         { id: 'f-mbt-sink', name: '洗手台', position: [3.1, 0, 4.8], rotation: 0, size: [1, 0.85, 0.45], type: 'sink', color: '#ffffff' },
       ],
@@ -800,8 +800,8 @@ export const modernApartmentScene: SceneData = {
       bayWindows: [],
       frenchWindows: [],
       furniture: [
-        { id: 'f-wi-l', name: '衣柜', position: [1.55, 0, 7.75], rotation: 90, size: [3.0, 2.4, 0.6], type: 'cabinet', color: '#d4c5b0' },
-        { id: 'f-wi-r', name: '衣柜', position: [0.4, 0, 6.45], rotation: 0, size: [2.0, 2.4, 0.6], type: 'cabinet', color: '#d4c5b0' },
+        { id: 'f-wi-l', name: '衣柜', position: [1.6, 0, 7.7], rotation: 90, size: [3.0, 2.4, 0.6], type: 'cabinet', color: '#d4c5b0' },
+        { id: 'f-wi-r', name: '衣柜', position: [0.4, 0, 6.45], rotation: 0, size: [1.9, 2.4, 0.6], type: 'cabinet', color: '#d4c5b0' },
       ],
     },
 
@@ -918,7 +918,7 @@ export const modernApartmentScene: SceneData = {
         { id: 'f-b2-bed', name: '单人床', position: [15.7, 0, 8.15], rotation: -90, size: [1.8, 0.45, 2.0], type: 'bed', color: '#e8e0d4' },
         { id: 'f-b2-ns1', name: '床头柜', position: [16.5, 0, 6.8], rotation: 0, size: [0.5, 0.5, 0.45], type: 'cabinet', color: '#8b7355' },
         { id: 'f-b2-ns2', name: '床头柜', position: [16.5, 0, 9.5], rotation: 0, size: [0.5, 0.5, 0.45], type: 'cabinet', color: '#8b7355' },
-        { id: 'f-b2-tmb', name: '衣柜', position: [16, 0, 5.8], rotation: -90, size: [2.0, 2.45, 0.5], type: 'cabinet', color: '#d4c5b0' },
+        { id: 'f-b2-tmb', name: '衣柜', position: [15.9, 0, 5.85], rotation: -90, size: [2.0, 2.45, 0.5], type: 'cabinet', color: '#d4c5b0' },
       ],
     },
   ],
