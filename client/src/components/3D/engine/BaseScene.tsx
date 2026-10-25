@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, Grid, Environment, Lightformer, SoftShadows } from '@react-three/drei';
 import * as THREE from 'three';
@@ -147,7 +147,28 @@ function EngineScaleReporter({ center }: { center: [number, number, number] }) {
 
 /* ==================== 光照 ==================== */
 function EngineLighting({ mode, configs }: { mode: string; configs: Record<string, LightingModeConfig> }) {
+  const dirRef = useRef<THREE.DirectionalLight>(null);
   const config = configs[mode] ?? configs[Object.keys(configs)[0]];
+  const range = config?.shadowCameraRange ?? 15;
+
+  /* R3F 对 shadow-camera-* 这类嵌套属性只做赋值, 不会调用 updateProjectionMatrix,
+     阴影相机一直停留在 DirectionalLightShadow 的默认 ±5m 视锥,
+     导致只有原点附近一小块有投影 (户外 80×60m 场景几乎全部丢失阴影)。
+     这里显式同步视锥并刷新投影矩阵。 */
+  useLayoutEffect(() => {
+    const light = dirRef.current;
+    if (!light) return;
+    const cam = light.shadow.camera;
+    cam.left = -range;
+    cam.right = range;
+    cam.top = range;
+    cam.bottom = -range;
+    cam.near = 0.5;
+    cam.far = 200;
+    cam.updateProjectionMatrix();
+    light.shadow.needsUpdate = true;
+  }, [range, mode]);
+
   if (!config) return null;
 
   return (
@@ -155,19 +176,15 @@ function EngineLighting({ mode, configs }: { mode: string; configs: Record<strin
       {config.fog && <fog attach="fog" args={[config.fog[1], config.fog[0], config.fog[0] + 15]} />}
       <ambientLight intensity={config.ambient} color={config.ambientColor} />
       <directionalLight
+        ref={dirRef}
         position={config.dirPos}
         intensity={config.dirIntensity}
         color={config.dirColor}
         castShadow={config.castShadow ?? true}
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-left={-(config.shadowCameraRange ?? 15)}
-        shadow-camera-right={config.shadowCameraRange ?? 15}
-        shadow-camera-top={config.shadowCameraRange ?? 15}
-        shadow-camera-bottom={-(config.shadowCameraRange ?? 15)}
-        shadow-camera-near={0.5}
-        shadow-camera-far={50}
+        shadow-mapSize-width={config.shadowMapSize ?? 2048}
+        shadow-mapSize-height={config.shadowMapSize ?? 2048}
         shadow-bias={-0.0005}
+        shadow-normalBias={0.02}
       />
       {config.dir2Intensity > 0 && (
         <directionalLight
@@ -240,6 +257,7 @@ export function BaseScene(props: BaseSceneProps) {
   const {
     center, viewMode, resetCamera, cameraPresets, defaultFov = 50,
     walkPoints = [], lighting, lightingConfigs, grid, background,
+    softShadow,
     enableDrag = false, dragSize, dragOffset, dragValidator, dragValidatorDetailed,
     onDragOver, onDrop, onDragEnd, onPointerMissed, children,
   } = props;
@@ -426,7 +444,13 @@ export function BaseScene(props: BaseSceneProps) {
       <Suspense fallback={null}>
         <DisableBrowserGestures />
         {/* PCSS 软阴影: 阴影边缘随距离柔和扩散, 去除硬边截图感 */}
-        <SoftShadows size={22} samples={8} focus={0.7} />
+        {softShadow !== false && (
+          <SoftShadows
+            size={(softShadow?.size) ?? 22}
+            samples={softShadow?.samples ?? 8}
+            focus={softShadow?.focus ?? 0.7}
+          />
+        )}
         <color attach="background" args={[background]} />
 
         <EngineCameraController

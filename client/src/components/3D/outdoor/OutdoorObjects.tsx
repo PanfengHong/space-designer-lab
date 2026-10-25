@@ -49,6 +49,8 @@ function OutdoorObjectView({ data }: { data: OutdoorObject }) {
   const selectedId = useAppStore((s) => s.selectedOutdoorObjectId);
   const layers = useAppStore((s) => s.layers);
   const selectOutdoorObject = useAppStore((s) => s.selectOutdoorObject);
+  const beginTransform = useAppStore((s) => s.beginTransform);
+  const isTransformTarget = useAppStore((s) => s.transformSession?.id === data.id);
   const isSelected = selectedId === data.id;
   const spaceLocked = layers.find((l) => l.id === 'space')?.locked ?? true;
 
@@ -58,6 +60,9 @@ function OutdoorObjectView({ data }: { data: OutdoorObject }) {
     e.stopPropagation();
     if (spaceLocked) return;
     selectOutdoorObject(data.id);
+    // 左键按下即进入"移动"会话: 拖动期间由 OutdoorTransformController 的 ghost 跟随指针,
+    // 松手才提交到 store —— 与室内家具的交互保持一致。
+    if (e.button === 0) beginTransform(data.id, 'move');
   };
   const handlePointerOver = (e: any) => {
     if (spaceLocked) return;
@@ -70,6 +75,7 @@ function OutdoorObjectView({ data }: { data: OutdoorObject }) {
 
   return (
     <group
+      visible={!isTransformTarget}
       position={data.position}
       rotation={[0, (data.rotation * Math.PI) / 180, 0]}
       onPointerDown={handlePointerDown}

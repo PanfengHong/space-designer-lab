@@ -301,6 +301,7 @@ export function buildOutdoorColliders(scene: OutdoorSceneData): OutdoorColliders
     colliders.objects.push({
       obb: itemObb(o.size, o.rotation, o.position[0], o.position[2]),
       name: o.name,
+      id: o.id,
     });
   }
   return colliders;
@@ -321,8 +322,9 @@ export function checkOutdoorPlacement(
   item: { kind: 'ground' | 'object'; size: [number, number, number] },
   x: number,
   z: number,
+  options?: { excludeId?: string; rotation?: number },
 ): PlacementResult {
-  const obb = itemObb(item.size, 0, x, z);
+  const obb = itemObb(item.size, options?.rotation ?? 0, x, z);
   const corners = obbCorners(obb);
 
   if (!insideBounds(corners, colliders.bases)) {
@@ -330,6 +332,7 @@ export function checkOutdoorPlacement(
   }
   if (item.kind === 'object') {
     for (const o of colliders.objects) {
+      if (options?.excludeId && o.id === options.excludeId) continue;
       if (obbOverlap(obb, o.obb)) return { ok: false, reason: `与「${o.name}」重叠` };
     }
   }

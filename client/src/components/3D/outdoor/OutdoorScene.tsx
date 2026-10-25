@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useRef, useCallback } from 'react';
 import { useThree } from '@react-three/fiber';
-import { Text } from '@react-three/drei';
+import { Text, ContactShadows } from '@react-three/drei';
 import { useShallow } from 'zustand/react/shallow';
 import * as THREE from 'three';
 import { useAppStore } from '../../../store/useAppStore';
@@ -9,8 +9,9 @@ import { BaseScene } from '../engine/BaseScene';
 import type { ViewMode, CameraPreset, LightingModeConfig, GridConfig, WalkPoint } from '../engine/types';
 import { GroundItemsGroup, GroundItemContent } from './GroundItems';
 import { OutdoorObjectsGroup, OutdoorObjectContent } from './OutdoorObjects';
+import { OutdoorTransformController } from './OutdoorTransform';
 import { useOutdoorPalette } from '../../../constants/outdoorStyles';
-import { buildOutdoorColliders, checkOutdoorPlacement } from '../../../utils/collision';
+import { buildOutdoorColliders, checkOutdoorPlacement, type OutdoorColliders } from '../../../utils/collision';
 import type { ModelLayer, GroundItem, OutdoorObject, GroundItemType, OutdoorObjectType } from '../../../types';
 
 // 户外场景中心
@@ -102,11 +103,14 @@ const OUTDOOR_CAMERA_PRESETS: Record<ViewMode, CameraPreset> = {
 };
 
 const OUTDOOR_LIGHTING_CONFIGS: Record<string, LightingModeConfig> = {
-  自然光: { ambient: 0.72, ambientColor: '#ffffff', dirIntensity: 0.85, dirColor: '#fffef0', dirPos: [28, 42, 20], dir2Intensity: 0.25, dir2Color: '#c8daf0', dir2Pos: [-20, 25, -18], hemiSky: '#cfe2f5', hemiGround: '#dde4d8', hemiIntensity: 0.55, pointLights: [], fog: null, shadowCameraRange: 45 },
-  人造光: { ambient: 0.35, ambientColor: '#fff5e6', dirIntensity: 0.15, dirColor: '#ffe8cc', dirPos: [28, 42, 20], dir2Intensity: 0, hemiSky: '#3a3a48', hemiGround: '#2a2a30', hemiIntensity: 0.2, pointLights: [], fog: [70, '#2a3040'], shadowCameraRange: 45 },
-  阴天:   { ambient: 0.65, ambientColor: '#d0d4d8', dirIntensity: 0.25, dirColor: '#c8cdd2', dirPos: [28, 42, 20], dir2Intensity: 0, hemiSky: '#b8bcc0', hemiGround: '#a0a4a8', hemiIntensity: 0.7, pointLights: [], fog: null, shadowCameraRange: 45 },
-  夜景:   { ambient: 0.2, ambientColor: '#3a4868', dirIntensity: 0.4, dirColor: '#c8d8f0', dirPos: [28, 42, 20], dir2Intensity: 0, hemiSky: '#1a2a48', hemiGround: '#0e1428', hemiIntensity: 0.35, pointLights: [], fog: [90, '#1a2030'], shadowCameraRange: 45 },
-  黄昏:   { ambient: 0.32, ambientColor: '#d8c8b8', dirIntensity: 1.05, dirColor: '#ffa060', dirPos: [28, 42, 20], dir2Intensity: 0, hemiSky: '#c8a890', hemiGround: '#5a4530', hemiIntensity: 0.45, pointLights: [], fog: [110, '#9a8068'], shadowCameraRange: 45 },
+  /* 主光方位 (dirPos) 刻意与默认相机方位错开约 90°:
+     原来的 [28,42,20] 几乎和相机同向, 阴影全部被物体自身挡住 (投影落在物体背后),
+     视觉上就是"室外物体没有阴影"。现在改为侧逆光, 投影朝画面左前方展开。 */
+  自然光: { ambient: 0.62, ambientColor: '#ffffff', dirIntensity: 1.15, dirColor: '#fffef0', dirPos: [34, 46, -30], dir2Intensity: 0.25, dir2Color: '#c8daf0', dir2Pos: [-20, 25, -18], hemiSky: '#cfe2f5', hemiGround: '#dde4d8', hemiIntensity: 0.45, pointLights: [], fog: null, shadowCameraRange: 55, shadowMapSize: 4096 },
+  人造光: { ambient: 0.35, ambientColor: '#fff5e6', dirIntensity: 0.15, dirColor: '#ffe8cc', dirPos: [34, 46, -30], dir2Intensity: 0, hemiSky: '#3a3a48', hemiGround: '#2a2a30', hemiIntensity: 0.2, pointLights: [], fog: [70, '#2a3040'], shadowCameraRange: 55, shadowMapSize: 4096 },
+  阴天:   { ambient: 0.65, ambientColor: '#d0d4d8', dirIntensity: 0.25, dirColor: '#c8cdd2', dirPos: [34, 46, -30], dir2Intensity: 0, hemiSky: '#b8bcc0', hemiGround: '#a0a4a8', hemiIntensity: 0.7, pointLights: [], fog: null, shadowCameraRange: 55, shadowMapSize: 4096 },
+  夜景:   { ambient: 0.2, ambientColor: '#3a4868', dirIntensity: 0.4, dirColor: '#c8d8f0', dirPos: [34, 46, -30], dir2Intensity: 0, hemiSky: '#1a2a48', hemiGround: '#0e1428', hemiIntensity: 0.35, pointLights: [], fog: [90, '#1a2030'], shadowCameraRange: 55, shadowMapSize: 4096 },
+  黄昏:   { ambient: 0.32, ambientColor: '#d8c8b8', dirIntensity: 1.05, dirColor: '#ffa060', dirPos: [34, 46, -30], dir2Intensity: 0, hemiSky: '#c8a890', hemiGround: '#5a4530', hemiIntensity: 0.45, pointLights: [], fog: [110, '#9a8068'], shadowCameraRange: 55, shadowMapSize: 4096 },
 };
 
 const OUTDOOR_GRID_CONFIG: GridConfig = {
@@ -162,12 +166,29 @@ function OutdoorLabels() {
   );
 }
 
-function OutdoorSceneContent({ viewMode, layers, showLabels }: { viewMode: string; layers: ModelLayer[]; showLabels: boolean }) {
+function OutdoorSceneContent({
+  viewMode,
+  layers,
+  showLabels,
+  colliders,
+}: {
+  viewMode: string;
+  layers: ModelLayer[];
+  showLabels: boolean;
+  colliders: OutdoorColliders;
+}) {
   const groundItems = useAppStore((s) => s.outdoorSceneData.ground);
   const objects = useAppStore((s) => s.outdoorSceneData.objects);
   const groundLocked = layers.find((l) => l.id === 'ground')?.locked ?? true;
   const spaceLocked = layers.find((l) => l.id === 'space')?.locked ?? true;
   const isWalkthrough = viewMode === 'walkthrough';
+  const palette = useOutdoorPalette();
+
+  // 纯净白模: 用接触阴影强化物体与地面的贴合感 (位移/旋转落位后按 key 重烘焙)
+  const shadowKey = useMemo(
+    () => `${objects.map((o) => `${o.position[0].toFixed(2)},${o.position[2].toFixed(2)},${o.rotation}`).join('|')}#${groundItems.length}`,
+    [objects, groundItems.length],
+  );
 
   return (
     <>
@@ -185,6 +206,22 @@ function OutdoorSceneContent({ viewMode, layers, showLabels }: { viewMode: strin
       <group pointerEvents={spaceLocked ? 'none' : 'auto'}>
         <OutdoorObjectsGroup items={objects} />
       </group>
+
+      {/* 对象拖拽移动 / 旋转手柄 */}
+      <OutdoorTransformController colliders={colliders} />
+
+      {/* 接触阴影: 物体与地面贴合的暗部, 所有风格都开 (白模更重), 保证任何光照角度下物体都"落地" */}
+      <ContactShadows
+        key={shadowKey}
+        position={[0, 0.16, 0]}
+        scale={150}
+        far={12}
+        blur={2.4}
+        opacity={palette.monochrome ? 0.42 : 0.3}
+        resolution={1024}
+        frames={1}
+        color={palette.monochrome ? '#6b7785' : '#5c6b7a'}
+      />
 
       {showLabels && <OutdoorLabels />}
     </>
@@ -220,6 +257,21 @@ export function OutdoorScene() {
   })));
 
   const palette = useOutdoorPalette();
+
+  // 纯净白模: 降低环境光、增强主光对比, 让白色体块的明暗层次与投影更清晰
+  const monochrome = palette.monochrome;
+  const lightingConfigs = useMemo(() => {
+    if (!monochrome) return OUTDOOR_LIGHTING_CONFIGS;
+    const tweak = (c: LightingModeConfig): LightingModeConfig => ({
+      ...c,
+      ambient: c.ambient * 0.6,
+      hemiIntensity: c.hemiIntensity * 0.7,
+      dirIntensity: c.dirIntensity * 1.5,
+    });
+    return Object.fromEntries(
+      Object.entries(OUTDOOR_LIGHTING_CONFIGS).map(([k, v]) => [k, tweak(v)]),
+    ) as Record<string, LightingModeConfig>;
+  }, [monochrome]);
 
   const bgColor = useMemo(() => {
     // 暗色风格强制使用深色背景, 否则跟随光照模式
@@ -299,7 +351,8 @@ export function OutdoorScene() {
         cameraPresets={OUTDOOR_CAMERA_PRESETS}
         walkPoints={OUTDOOR_WALK_POINTS}
         lighting={viewSettings.lighting}
-        lightingConfigs={OUTDOOR_LIGHTING_CONFIGS}
+        lightingConfigs={lightingConfigs}
+        softShadow={false}
         grid={gridConfig}
         background={bgColor}
         enableDrag
@@ -312,6 +365,7 @@ export function OutdoorScene() {
           viewMode={viewMode}
           layers={layers}
           showLabels={!!viewSettings.showLabels}
+          colliders={colliders}
         />
       </BaseScene>
     </div>

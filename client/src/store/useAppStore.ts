@@ -266,7 +266,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             { id: 'ground', name: '地面结构层', locked: true },
             { id: 'space', name: '空间设计层', locked: true },
           ],
-          designStyleId: 'park1',
+          designStyleId: 'park2',
           selectedGroundId: null,
           selectedOutdoorObjectId: null,
         };

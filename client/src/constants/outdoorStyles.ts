@@ -36,20 +36,20 @@ export interface OutdoorPalette {
 
 export const OUTDOOR_STYLE_OPTIONS = [
   {
-    id: 'park1',
-    code: 'DIGITAL PARK',
-    label: '数字园区',
-    color: '#4a90d9',
-    swatch: 'linear-gradient(135deg, #4a90d9 0%, #dceaf6 100%)',
-    desc: '数字园区蓝白风格, 参考数字化大屏视觉。',
-  },
-  {
     id: 'park2',
     code: 'PURE MODEL',
     label: '纯净白模',
     color: '#f5f5f5',
     swatch: 'linear-gradient(135deg, #ffffff 0%, #d8d8d8 100%)',
     desc: '纯净白模风格, 用于体块推敲与方案汇报。',
+  },
+  {
+    id: 'park1',
+    code: 'DIGITAL PARK',
+    label: '数字园区',
+    color: '#4a90d9',
+    swatch: 'linear-gradient(135deg, #4a90d9 0%, #dceaf6 100%)',
+    desc: '数字园区蓝白风格, 参考数字化大屏视觉。',
   },
   {
     id: 'park3',

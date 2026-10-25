@@ -41,6 +41,8 @@ export interface LightingModeConfig {
   fog: [number, string] | null;
   castShadow?: boolean;
   shadowCameraRange?: number;
+  /** 阴影贴图分辨率 (默认 2048); 户外园区范围大, 需要 4096 才能让车/树的小投影保持清晰 */
+  shadowMapSize?: number;
 }
 
 /** 网格配置 */
@@ -110,6 +112,10 @@ export interface BaseSceneProps {
   /** 点击空白处回调 (R3F onPointerMissed, 用于清空选中) */
   onPointerMissed?: () => void;
 
+  /**
+   * PCSS 软阴影参数。省略时使用室内默认值 (大半径柔化); 传 false 表示使用 three 内置 PCF 软阴影。
+   */
+  softShadow?: false | { size?: number; samples?: number; focus?: number };
 
   /** 场景内容 */
   children: ReactNode;
