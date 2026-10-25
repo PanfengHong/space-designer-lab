@@ -50,8 +50,15 @@ function seedData(): ModelItem[] {
     { id: 'm-campus-school', name: '智慧校园', category: 'campus', type: 'school', tags: ['校园', '教学', '操场'] },
   ];
 
+  const offices: Omit<ModelItem, 'createdAt' | 'updatedAt'>[] = [
+    { id: 'm-office-floor', name: '写字楼标准层', category: 'office', type: 'office-floor', tags: ['写字楼', '整层', '开放办公'] },
+    { id: 'm-office-open', name: '开放办公区', category: 'office', type: 'open-office', tags: ['办公', '工位', '团队'] },
+    { id: 'm-office-meeting', name: '会议空间', category: 'office', type: 'meeting-room', tags: ['会议', '洽谈'] },
+    { id: 'm-office-private', name: '独立办公室', category: 'office', type: 'private-office', tags: ['办公', '经理室'] },
+  ];
+
   const ts = now();
-  return [...furniture, ...apartments, ...campuses].map((m) => ({
+  return [...furniture, ...apartments, ...campuses, ...offices].map((m) => ({
     ...m,
     createdAt: ts,
     updatedAt: ts,

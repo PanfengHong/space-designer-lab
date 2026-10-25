@@ -180,7 +180,7 @@ export interface ViewSettings {
 }
 
 // 模型分类
-export type ModelCategory = 'furniture' | 'apartment' | 'campus';
+export type ModelCategory = 'furniture' | 'apartment' | 'campus' | 'office';
 
 // 设计器模式: 室内户型设计 / 户外空间设计
 export type DesignerMode = 'interior' | 'outdoor';

@@ -4,6 +4,7 @@ import { OrbitControls, Grid, Environment, Lightformer, SoftShadows } from '@rea
 import * as THREE from 'three';
 import { useAppStore } from '../../../store/useAppStore';
 import { screenToFloor, snapToGrid } from '../../../utils/r3fBridge';
+import { PerformanceProbe } from './PerformanceProbe';
 import type {
   BaseSceneProps,
   ViewMode,
@@ -437,6 +438,7 @@ export function BaseScene(props: BaseSceneProps) {
           walkthroughIndex={walkthroughIndex}
         />
         <EngineScaleReporter center={center} />
+        <PerformanceProbe />
 
         {!isWalkthrough && (
           <OrbitControls

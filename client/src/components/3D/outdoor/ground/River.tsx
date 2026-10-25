@@ -12,8 +12,8 @@ export function River({ data, palette }: ContentProps) {
           color={color}
           metalness={0.3}
           roughness={0.15}
-          emissive={palette.monochrome ? '#000000' : '#1b4f73'}
-          emissiveIntensity={0.12}
+          emissive={palette.monochrome ? '#000000' : palette.glowColor}
+          emissiveIntensity={palette.monochrome ? 0 : palette.glowIntensity}
         />
       </mesh>
     </group>

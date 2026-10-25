@@ -19,8 +19,8 @@ export function GlassBuilding({ data, palette }: { data: OutdoorObject; palette:
   const towerH = h - podiumH - roofH;
   const towerY = podiumH + towerH / 2;
 
-  // 玻璃色: 彩色风格使用模型自身颜色, 白模风格使用灰
-  const glassColor = palette.monochrome ? palette.glass : data.color;
+  // 玻璃色: 仅数字园区风格沿用素材自身颜色, 白模/暗色风格使用调色板色
+  const glassColor = palette.monochrome || !palette.useModelColor ? palette.glass : data.color;
 
   // 楼层横线
   const floorGap = 1.2;
@@ -75,11 +75,11 @@ export function GlassBuilding({ data, palette }: { data: OutdoorObject; palette:
         <meshStandardMaterial
           color={glassColor}
           transparent
-          opacity={palette.monochrome ? 0.5 : 0.58}
+          opacity={palette.monochrome ? 0.5 : palette.dark ? 0.88 : 0.58}
           metalness={0.3}
           roughness={0.12}
-          emissive={glassColor}
-          emissiveIntensity={palette.monochrome ? 0 : 0.08}
+          emissive={palette.glowColor}
+          emissiveIntensity={palette.monochrome ? 0 : palette.glowIntensity}
         />
       </mesh>
 

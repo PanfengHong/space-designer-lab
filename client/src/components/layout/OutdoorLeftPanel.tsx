@@ -217,12 +217,7 @@ export function OutdoorLeftPanel() {
                 >
                   <div
                     className="w-10 h-10 rounded-md ring-1 ring-gray-200 flex-shrink-0"
-                    style={{
-                      background:
-                        style.id === 'park1'
-                          ? 'linear-gradient(135deg, #4a90d9 0%, #dceaf6 100%)'
-                          : 'linear-gradient(135deg, #ffffff 0%, #d8d8d8 100%)',
-                    }}
+                    style={{ background: style.swatch }}
                   />
                   <div className="text-left">
                     <div className="text-xs font-medium text-gray-800">{style.label}</div>
@@ -231,7 +226,7 @@ export function OutdoorLeftPanel() {
                 </button>
               ))}
               <div className="text-[10px] text-gray-400 text-center mt-3 px-2">
-                数字园区蓝白风格, 参考数字化大屏视觉。
+                {OUTDOOR_STYLE_OPTIONS.find((s) => s.id === designStyleId)?.desc ?? '数字园区蓝白风格, 参考数字化大屏视觉。'}
               </div>
             </div>
           )}

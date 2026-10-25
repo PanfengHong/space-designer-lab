@@ -7,6 +7,14 @@ import { ModelForm } from './ModelForm';
 import { getModelList, createModel, updateModel, deleteModel } from '../../api/mockApi';
 import type { ModelItem } from '../../types';
 
+/**
+ * 园区大类切换项
+ * 当前仅「园区」一种, 后续新增类别时在此追加即可 (页面会自动渲染切换按钮)
+ */
+const CAMPUS_CATEGORY_TABS = [
+  { key: 'campus' as const, label: '园区', en: 'Campus', icon: Trees },
+];
+
 /** 户外空间模型库 — 园区/场地管理 */
 export function CampusManagement() {
   const { currentUser, logout, setActiveModelId } = useAppStore();
@@ -100,13 +108,9 @@ export function CampusManagement() {
       {/* 顶部导航 */}
       <div className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 select-none shrink-0">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/home')}
-            className="w-9 h-9 rounded-full bg-gray-900 flex items-center justify-center hover:bg-gray-700 transition-colors"
-            title="返回工作台"
-          >
+          <div className="w-9 h-9 rounded-full bg-gray-900 flex items-center justify-center">
             <Trees size={17} className="text-white" />
-          </button>
+          </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-gray-900 text-sm tracking-wide">BASE</span>
@@ -115,6 +119,9 @@ export function CampusManagement() {
             </div>
             <div className="text-[10px] text-gray-400 tracking-widest uppercase">Outdoor Space Library</div>
           </div>
+        </div>
+
+        <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/home')}
             title="返回工作台"
@@ -123,9 +130,6 @@ export function CampusManagement() {
             <ArrowLeft size={13} />
             返回工作台
           </button>
-        </div>
-
-        <div className="flex items-center gap-3">
           <div className="relative" ref={userMenuRef}>
             <button
               onClick={() => setUserMenuOpen((v) => !v)}
@@ -165,50 +169,92 @@ export function CampusManagement() {
         </div>
       </div>
 
-      {/* 卡片网格 */}
-      <div className="flex-1 overflow-y-auto px-6 py-4">
-        <div className="flex items-center justify-end gap-3 mb-4">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索园区名称或标签..."
-              className="w-56 pl-9 pr-3 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 bg-white"
-            />
+      {/* 园区库内容 — 居中布局 */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-6xl mx-auto px-6 py-10">
+          {/* 标题区 (居中) */}
+          <div className="text-center">
+            <div className="text-[10px] tracking-[0.32em] text-gray-400 uppercase">Outdoor Library</div>
+            <h1 className="text-2xl font-semibold text-gray-900 mt-2 tracking-tight">园区库</h1>
+            <p className="text-xs text-gray-500 mt-2">
+              数字园区、工业园区、物流园区与办公园区的地面与空间设计模型
+            </p>
           </div>
-          <button
-            onClick={handleCreate}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-gray-900 text-white hover:bg-gray-800 rounded-md transition-colors"
-          >
-            <Plus size={14} />
-            新增园区
-          </button>
-        </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center h-40 text-gray-400">
-            <Loader2 size={20} className="animate-spin mr-2" />
-            加载中...
+          {/* 大号分类切换 (居中) */}
+          <div className="mt-7 flex justify-center">
+            <div className="inline-flex items-center gap-1.5 p-1.5 bg-white border border-gray-200 rounded-full shadow-sm">
+              {CAMPUS_CATEGORY_TABS.map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.key}
+                    className="flex items-center gap-2.5 px-6 py-2.5 rounded-full text-sm bg-gray-900 text-white shadow-md"
+                  >
+                    <Icon size={16} />
+                    <span className="font-medium">{tab.label}</span>
+                    <span className="text-[10px] tracking-wider uppercase text-white/50">{tab.en}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 text-gray-400">
-            <Trees size={32} className="mb-2 opacity-40" />
-            <span className="text-xs">暂无园区，点击"新增园区"创建</span>
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-            {filtered.map((item) => (
-              <ModelCard
-                key={item.id}
-                item={item}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                onEnter={handleEnter}
+
+          {/* 搜索 + 新增 (居中) */}
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <div className="relative">
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索园区名称或标签..."
+                className="w-64 h-11 pl-10 pr-4 text-sm border border-gray-200 rounded-full bg-white focus:outline-none focus:border-gray-400"
               />
-            ))}
+            </div>
+            <button
+              onClick={handleCreate}
+              className="flex items-center gap-2 h-11 px-6 text-sm font-medium bg-gray-900 text-white rounded-full shadow-lg shadow-gray-900/10 hover:bg-gray-800 active:scale-[0.98] transition-all"
+            >
+              <Plus size={16} />
+              新增园区
+            </button>
           </div>
-        )}
+
+          {/* 园区网格 */}
+          <div className="mt-9">
+            {loading ? (
+              <div className="flex items-center justify-center h-40 text-gray-400">
+                <Loader2 size={20} className="animate-spin mr-2" />
+                加载中...
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-48 text-gray-400">
+                <Trees size={36} className="mb-3 opacity-30" />
+                <span className="text-xs">暂无园区，点击「新增园区」创建</span>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-3 px-0.5">
+                  <span className="text-[11px] text-gray-400">园区 · 共 {filtered.length} 个</span>
+                  {searchQuery.trim() && (
+                    <span className="text-[11px] text-gray-400">搜索「{searchQuery.trim()}」</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {filtered.map((item) => (
+                    <ModelCard
+                      key={item.id}
+                      item={item}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                      onEnter={handleEnter}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {formOpen && (

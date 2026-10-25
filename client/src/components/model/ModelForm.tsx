@@ -39,6 +39,13 @@ const CAMPUS_TYPES = [
   { value: 'office-park', label: '办公园区' },
 ];
 
+const OFFICE_TYPES = [
+  { value: 'office-floor', label: '整层办公' },
+  { value: 'open-office', label: '开放办公区' },
+  { value: 'meeting-room', label: '会议室' },
+  { value: 'private-office', label: '独立办公室' },
+];
+
 const COLOR_PRESETS = [
   '#e8e0d4', '#d4c5b0', '#c8b8a0', '#a08060',
   '#8b7355', '#5c4033', '#3d3d3d', '#1a1a1a',
@@ -50,8 +57,13 @@ export function ModelForm({ item, category, onSave, onClose }: ModelFormProps) {
   const types =
     category === 'furniture' ? FURNITURE_TYPES
     : category === 'campus' ? CAMPUS_TYPES
+    : category === 'office' ? OFFICE_TYPES
     : APARTMENT_TYPES;
-  const categoryLabel = category === 'furniture' ? '家具模型' : category === 'campus' ? '园区模板' : '户型模板';
+  const categoryLabel =
+    category === 'furniture' ? '家具模型'
+    : category === 'campus' ? '园区模板'
+    : category === 'office' ? '办公空间模板'
+    : '户型模板';
 
   const [name, setName] = useState('');
   const [type, setType] = useState('');

@@ -9,9 +9,9 @@ import type { OutdoorPalette } from '../../../../constants/outdoorStyles';
  */
 export function GuardBooth({ data, palette }: { data: OutdoorObject; palette: OutdoorPalette }) {
   const [w, h, d] = data.size;
-  const wallColor = palette.monochrome ? palette.wall : data.color;
-  const roofColor = palette.monochrome ? palette.concrete : '#2b6cb0';
-  const winColor = palette.monochrome ? palette.glass : '#6fa8dc';
+  const wallColor = palette.monochrome || !palette.useModelColor ? palette.wall : data.color;
+  const roofColor = palette.monochrome ? palette.concrete : palette.dark ? palette.glassDark : '#2b6cb0';
+  const winColor = palette.monochrome ? palette.glass : palette.dark ? palette.glowColor : '#6fa8dc';
 
   return (
     <group>
@@ -36,7 +36,7 @@ export function GuardBooth({ data, palette }: { data: OutdoorObject; palette: Ou
       {/* 门 (正面偏右) */}
       <mesh position={[w * 0.28, h * 0.25, d / 2 + 0.02]}>
         <boxGeometry args={[w * 0.22, h * 0.5, 0.04]} />
-        <meshStandardMaterial color={palette.monochrome ? '#ccc' : '#4a5568'} roughness={0.6} />
+        <meshStandardMaterial color={palette.monochrome || palette.dark ? palette.metal : '#4a5568'} roughness={0.6} />
       </mesh>
 
       {/* 侧面窗 */}

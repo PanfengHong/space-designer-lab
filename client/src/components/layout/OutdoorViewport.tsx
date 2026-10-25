@@ -5,6 +5,7 @@ import { OutdoorScene } from '../3D/outdoor/OutdoorScene';
 import { OutdoorPlan2D } from '../2D/OutdoorPlan2D';
 import { LIGHTING_OPTIONS, LIGHTING_ICONS } from '../../constants/lighting';
 import { OUTDOOR_STYLE_OPTIONS } from '../../constants/outdoorStyles';
+import { PerformanceMonitor } from '../panel/PerformanceMonitor';
 import type { GroundItem, OutdoorObject, ViewMode, RenderMode } from '../../types';
 
 const GROUND_TYPE_LABEL: Record<string, string> = {
@@ -233,7 +234,9 @@ export function OutdoorViewport() {
       )}
 
       {/* === 光影面板 === */}
-      <div className="absolute bottom-12 right-4 z-10 select-none">
+      <div className="absolute bottom-12 right-4 z-10 select-none flex flex-col items-end gap-2">
+        {/* 性能监控悬浮按钮 (位于光影面板上方) */}
+        <PerformanceMonitor />
         <div className="bg-white/95 backdrop-blur-md rounded-lg shadow-lg border border-gray-200 px-3 py-2.5 w-56">
           <div className="flex items-center gap-2 mb-2">
             <div className="flex items-center gap-1.5">

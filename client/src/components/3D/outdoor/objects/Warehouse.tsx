@@ -17,7 +17,7 @@ export function Warehouse({ data, palette }: { data: OutdoorObject; palette: Out
       {/* 主体 */}
       <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[w, h, d]} />
-        <meshStandardMaterial color={palette.monochrome ? palette.wall : data.color} roughness={0.75} />
+        <meshStandardMaterial color={palette.monochrome || !palette.useModelColor ? palette.wall : data.color} roughness={0.75} />
       </mesh>
 
       {/* 顶部压顶 */}
@@ -43,7 +43,7 @@ export function Warehouse({ data, palette }: { data: OutdoorObject; palette: Out
           {Array.from({ length: 5 }, (_, k) => (
             <mesh key={k} position={[x, doorH * (0.18 + k * 0.16), d / 2 + 0.055]}>
               <boxGeometry args={[doorW * 0.92, 0.025, 0.02]} />
-              <meshBasicMaterial color={palette.monochrome ? '#c8ccd0' : '#3d7bb0'} />
+              <meshBasicMaterial color={palette.monochrome ? '#c8ccd0' : palette.glassDark} />
             </mesh>
           ))}
         </group>
@@ -58,8 +58,8 @@ export function Warehouse({ data, palette }: { data: OutdoorObject; palette: Out
           opacity={palette.monochrome ? 0.6 : 0.7}
           metalness={0.2}
           roughness={0.2}
-          emissive={palette.glass}
-          emissiveIntensity={palette.monochrome ? 0 : 0.06}
+          emissive={palette.glowColor}
+          emissiveIntensity={palette.monochrome ? 0 : palette.glowIntensity}
         />
       </mesh>
 

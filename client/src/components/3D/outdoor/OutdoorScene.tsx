@@ -127,6 +127,7 @@ const OUTDOOR_WALK_POINTS: WalkPoint[] = [
 /** 元素名称标签 */
 function OutdoorLabels() {
   const outdoorSceneData = useAppStore((s) => s.outdoorSceneData);
+  const palette = useOutdoorPalette();
   return (
     <group>
       {outdoorSceneData.objects.map((o) => (
@@ -134,11 +135,11 @@ function OutdoorLabels() {
           key={`lb-${o.id}`}
           position={[o.position[0], o.position[1] + o.size[1] + 0.6, o.position[2]]}
           fontSize={0.9}
-          color="#4a627a"
+          color={palette.label}
           anchorX="center"
           anchorY="middle"
           outlineWidth={0.03}
-          outlineColor="#ffffff"
+          outlineColor={palette.labelOutline}
         >
           {o.name}
         </Text>
@@ -148,11 +149,11 @@ function OutdoorLabels() {
           key={`lg-${g.id}`}
           position={[g.position[0], g.position[1] + 0.6, g.position[2]]}
           fontSize={0.8}
-          color="#5a7088"
+          color={palette.label}
           anchorX="center"
           anchorY="middle"
           outlineWidth={0.03}
-          outlineColor="#ffffff"
+          outlineColor={palette.labelOutline}
         >
           {g.name}
         </Text>
@@ -218,14 +219,25 @@ export function OutdoorScene() {
     addOutdoorObject: s.addOutdoorObject,
   })));
 
+  const palette = useOutdoorPalette();
+
   const bgColor = useMemo(() => {
+    // 暗色风格强制使用深色背景, 否则跟随光照模式
+    if (palette.bg) return palette.bg;
     switch (viewSettings.lighting) {
       case '夜景': return '#1a2030';
       case '黄昏': return '#8aa6c4';
       case '阴天': return '#cdd4dc';
       default: return '#dceaf6';
     }
-  }, [viewSettings.lighting]);
+  }, [viewSettings.lighting, palette.bg]);
+
+  // 暗色风格使用低明度网格线
+  const gridConfig = useMemo<GridConfig>(() => (
+    palette.gridCell && palette.gridSection
+      ? { ...OUTDOOR_GRID_CONFIG, cellColor: palette.gridCell, sectionColor: palette.gridSection }
+      : OUTDOOR_GRID_CONFIG
+  ), [palette.gridCell, palette.gridSection]);
 
   // 拖拽高亮框由 BaseScene 的 EngineDragGhost 直接写入 three 对象位置 (不经过 React),
   // 这里不再写 store, 否则每次 dragover 都会触发全场景重渲染导致高亮框滞后于鼠标
@@ -288,7 +300,7 @@ export function OutdoorScene() {
         walkPoints={OUTDOOR_WALK_POINTS}
         lighting={viewSettings.lighting}
         lightingConfigs={OUTDOOR_LIGHTING_CONFIGS}
-        grid={OUTDOOR_GRID_CONFIG}
+        grid={gridConfig}
         background={bgColor}
         enableDrag
         dragSize={draggingOutdoor?.size ?? null}

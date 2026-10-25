@@ -17,7 +17,7 @@ import { Shower } from '../3D/indoor/furniture/Shower';
 import { Stove } from '../3D/indoor/furniture/Stove';
 import { Appliance } from '../3D/indoor/furniture/Appliance';
 import { Decor } from '../3D/indoor/furniture/Decor';
-import { mockSceneData, oneBedroomScene, twoBedroomScene, modernApartmentScene } from '../../data/mockScene';
+import { mockSceneData, oneBedroomScene, twoBedroomScene, modernApartmentScene, getOfficeScene } from '../../data/mockScene';
 import { getOutdoorSceneForModel } from '../../data/outdoorScene';
 import type { GroundItem, OutdoorObject, OutdoorSceneData } from '../../types';
 
@@ -29,28 +29,25 @@ export function ModelThumbnail({ item }: { item: ModelItem }) {
   const key = `model-${item.id}`;
   const url = useThumbnailUrl(key);
 
-  // 根据家具尺寸计算相机距离 (留出余量, 确保完整显示)
-  const camDist =
-    item.category === 'furniture'
-      ? Math.max(...(item.size ?? [1, 1, 1]), 1) * 1.8 + 1.2
-      : item.category === 'campus'
-        ? 120
-        : 7;
-
-  // 相机 target
-  const target = useMemo<[number, number, number]>(() => {
-    if (item.category === 'furniture') return [0, 0, 0];
-    if (item.category === 'campus') return [0, 2, 0];
-    // 户型: 从 mockScene 提取中心
-    let scene: SceneData;
-    switch (item.type) {
-      case 'one-bed': scene = oneBedroomScene; break;
-      case 'two-bed': scene = twoBedroomScene; break;
-      case 'modern': scene = modernApartmentScene; break;
-      default: scene = mockSceneData;
+  // 户型 / 办公空间对应的场景模板
+  const previewScene = useMemo<SceneData | null>(() => {
+    if (item.category === 'apartment') {
+      switch (item.type) {
+        case 'one-bed': return oneBedroomScene;
+        case 'two-bed': return twoBedroomScene;
+        case 'modern': return modernApartmentScene;
+        default: return mockSceneData;
+      }
     }
+    if (item.category === 'office') return getOfficeScene(item.type);
+    return null;
+  }, [item.category, item.type]);
+
+  // 场景包围盒 (用于相机 target 与距离)
+  const bounds = useMemo(() => {
+    if (!previewScene) return { cx: 0, cz: 0, span: 0 };
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-    scene.rooms.forEach((r) => {
+    previewScene.rooms.forEach((r) => {
       r.walls.forEach((w) => {
         minX = Math.min(minX, w.start[0], w.end[0]);
         maxX = Math.max(maxX, w.start[0], w.end[0]);
@@ -58,14 +55,36 @@ export function ModelThumbnail({ item }: { item: ModelItem }) {
         maxZ = Math.max(maxZ, w.start[1], w.end[1]);
       });
     });
-    return [(minX + maxX) / 2, 0, (minZ + maxZ) / 2];
-  }, [item]);
+    if (minX === Infinity) return { cx: 0, cz: 0, span: 0 };
+    return {
+      cx: (minX + maxX) / 2,
+      cz: (minZ + maxZ) / 2,
+      span: Math.max(maxX - minX, maxZ - minZ),
+    };
+  }, [previewScene]);
+
+  // 根据模型类别计算相机距离 (留出余量, 确保完整显示)
+  const camDist =
+    item.category === 'furniture'
+      ? Math.max(...(item.size ?? [1, 1, 1]), 1) * 1.8 + 1.2
+      : item.category === 'campus'
+        ? 120
+        : item.category === 'office'
+          ? bounds.span * 1.7 + 2
+          : 7;
+
+  // 相机 target
+  const target = useMemo<[number, number, number]>(() => {
+    if (item.category === 'furniture') return [0, 0, 0];
+    if (item.category === 'campus') return [0, 2, 0];
+    return [bounds.cx, 0, bounds.cz];
+  }, [item.category, bounds]);
 
   useEffect(() => {
     const content =
       item.category === 'furniture' ? <FurniturePreview item={item} />
         : item.category === 'campus' ? <CampusPreview item={item} />
-        : <ApartmentPreview item={item} />;
+        : <PlanPreview scene={previewScene ?? mockSceneData} />;
 
     requestThumbnail({
       key,
@@ -73,7 +92,7 @@ export function ModelThumbnail({ item }: { item: ModelItem }) {
       target,
       content,
     });
-  }, [item, key, camDist, target]);
+  }, [item, key, camDist, target, previewScene]);
 
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -144,20 +163,11 @@ function FurniturePreview({ item }: { item: ModelItem }) {
   );
 }
 
-/** 户型预览 — 从真实场景数据提取房间轮廓 */
-function ApartmentPreview({ item }: { item: ModelItem }) {
-  const scene: SceneData = useMemo(() => {
-    switch (item.type) {
-      case 'one-bed': return oneBedroomScene;
-      case 'two-bed': return twoBedroomScene;
-      case 'modern': return modernApartmentScene;
-      default: return mockSceneData;
-    }
-  }, [item.type]);
-
+/** 户型 / 办公空间预览 — 从真实场景数据提取房间轮廓 */
+function PlanPreview({ scene }: { scene: SceneData }) {
   // 构建房间体块: 每个房间用扁平 box (地板) + 矮墙轮廓
   const blocks = useMemo(() => {
-    const result: { color: string; pos: [number, number, number]; size: [number, number, number]; isWall: boolean }[] = [];
+    const result: { color: string; pos: [number, number, number]; size: [number, number, number]; rot: number; isWall: boolean }[] = [];
     // 房间色调 (按顺序循环)
     const roomColors = ['#e8e0d4', '#d4e0e8', '#e0d4c8', '#d4e8e0', '#e8d4e0', '#d0d8e8'];
 
@@ -178,7 +188,7 @@ function ApartmentPreview({ item }: { item: ModelItem }) {
       const color = roomColors[idx % roomColors.length];
 
       // 地板
-      result.push({ color, pos: [cx, 0, cz], size: [dx, 0.06, dz], isWall: false });
+      result.push({ color, pos: [cx, 0, cz], size: [dx, 0.06, dz], rot: 0, isWall: false });
 
       // 墙体: 从 walls 数据生成
       room.walls.forEach((wall) => {
@@ -186,20 +196,19 @@ function ApartmentPreview({ item }: { item: ModelItem }) {
         const [ex, ez] = wall.end;
         const wlen = Math.sqrt((ex - sx) ** 2 + (ez - sz) ** 2);
         if (wlen < 0.01) return;
-        // 墙的方向角度
-        const angle = Math.atan2(ez - sz, ex - sx);
+        // 墙的方向角度 (绕 Y 轴, 使局部 X 轴对齐墙体走向)
+        const rot = -Math.atan2(ez - sz, ex - sx);
         const wcx = (sx + ex) / 2;
         const wcz = (sz + ez) / 2;
         // 矮墙高度 (缩略图用半高, 不遮挡内部)
         const wallH = 0.5;
-        // 墙体位置 (group 旋转)
         result.push({
           color: '#b0a898',
           pos: [wcx, wallH / 2, wcz],
           size: [wlen, wallH, 0.08],
+          rot,
           isWall: true,
         });
-        // 记录墙角度, 用 userData 模拟 (这里简化: 不旋转, 用近似)
       });
     });
     return result;
@@ -228,7 +237,7 @@ function ApartmentPreview({ item }: { item: ModelItem }) {
 
       {/* 地面阴影板 */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[center.x, 0, center.z]} receiveShadow>
-        <planeGeometry args={[40, 40]} />
+        <planeGeometry args={[60, 60]} />
         <shadowMaterial opacity={0.08} />
       </mesh>
 
@@ -241,7 +250,7 @@ function ApartmentPreview({ item }: { item: ModelItem }) {
       ))}
       {/* 墙体 (半透明, 不遮挡) */}
       {blocks.filter((b) => b.isWall).map((b, i) => (
-        <mesh key={`wall-${i}`} position={b.pos}>
+        <mesh key={`wall-${i}`} position={b.pos} rotation={[0, b.rot, 0]}>
           <boxGeometry args={b.size} />
           <meshStandardMaterial color={b.color} roughness={0.85} transparent opacity={0.75} />
         </mesh>
@@ -258,9 +267,9 @@ function CampusPreview({ item }: { item: ModelItem }) {
     switch (g.type) {
       case 'river': return '#9ccdee';
       case 'grass': return '#cfe9cd';
-      case 'road': return g.position[1] > 0.5 ? '#b8c2cd' : '#c2cad4';
-      case 'intersection': return '#c2cad4';
-      case 'ramp': return '#b8c2cd';
+      case 'road': return g.position[1] > 0.5 ? '#3a3e44' : '#4a4e54';
+      case 'intersection': return '#4a4e54';
+      case 'ramp': return '#3f4349';
       default: return g.color || '#f2f5f9';
     }
   };

@@ -3,12 +3,20 @@ import type { OutdoorPalette } from '../../../../constants/outdoorStyles';
 
 /**
  * 树木 — 树干 + 多层圆锥树冠
- * 非纯净白模风格: 树冠使用素材色 (data.color), 树干棕色
- * 纯净白模 (monochrome): 保持白色几何体
+ * 数字园区风格: 树冠使用素材色 (data.color), 树干棕色
+ * 纯净白模/暗色风格: 使用调色板中的低明度色
  */
 export function Tree({ data, palette }: { data: OutdoorObject; palette: OutdoorPalette }) {
-  const canopyColor = palette.monochrome ? '#ffffff' : data.color || '#5a8a4a';
-  const trunkColor = palette.monochrome ? '#f0f0f0' : '#8b6f52';
+  const canopyColor = palette.monochrome
+    ? '#ffffff'
+    : palette.useModelColor
+      ? data.color || '#5a8a4a'
+      : palette.grass;
+  const trunkColor = palette.monochrome
+    ? '#f0f0f0'
+    : palette.useModelColor
+      ? '#8b6f52'
+      : palette.concrete;
 
   // 按 size 高度缩放 (数据高度为 5~6m, 基准模型总高 6.5m)
   const scale = (data.size[1] || 6) / 6;

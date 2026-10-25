@@ -96,7 +96,7 @@ export function Home() {
 
         <div className="relative z-10 text-center mb-10">
           <h1 className="text-2xl font-semibold text-gray-900">选择设计方向</h1>
-          <p className="text-xs text-gray-500 mt-2 tracking-wide">室内户型与户外园区, 统一的空间设计体验</p>
+          <p className="text-xs text-gray-500 mt-2 tracking-wide">室内空间与户外园区, 统一的空间设计体验</p>
         </div>
 
         <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-5 w-full max-w-3xl">
@@ -118,13 +118,13 @@ export function Home() {
             </div>
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-base font-semibold text-gray-900">室内户型设计</div>
-                <div className="text-[11px] text-gray-400 mt-1 tracking-wide">APARTMENT · 建筑结构层 / 室内设计层</div>
+                <div className="text-base font-semibold text-gray-900">室内空间设计</div>
+                <div className="text-[11px] text-gray-400 mt-1 tracking-wide">INTERIOR · 户型 / 办公空间</div>
               </div>
               <ChevronRight size={18} className="text-gray-300 group-hover:text-gray-900 group-hover:translate-x-1 transition-all" />
             </div>
             <p className="text-xs text-gray-500 mt-3 leading-relaxed">
-              房间墙体、门窗、家具布置与户型平面, 支持透视、轴测、顶视、平面与漫游五种视图。
+              住宅户型与写字楼办公空间的墙体、门窗、家具布置与平面图, 支持透视、轴测、顶视、平面与漫游五种视图。
             </p>
           </button>
 

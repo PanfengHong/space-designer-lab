@@ -17,8 +17,8 @@ export function SchoolBuilding({ data, palette }: { data: OutdoorObject; palette
   const type = data.type;
 
   // 建筑配色
-  const wallColor = palette.monochrome ? palette.wall : data.color;
-  const windowColor = palette.monochrome ? palette.glass : '#6fa8dc';
+  const wallColor = palette.monochrome || !palette.useModelColor ? palette.wall : data.color;
+  const windowColor = palette.monochrome ? palette.glass : palette.dark ? palette.glowColor : '#6fa8dc';
   const baseColor = palette.concrete;
 
   // 层高
@@ -154,7 +154,7 @@ export function SchoolBuilding({ data, palette }: { data: OutdoorObject; palette
           {/* 入口门洞 (深色) */}
           <mesh position={[0, actualFloorH * 0.45, d / 2 + 0.03]}>
             <boxGeometry args={[w * 0.18, actualFloorH * 0.9, 0.06]} />
-            <meshStandardMaterial color={palette.monochrome ? '#d8dce0' : '#3a4a5a'} roughness={0.5} />
+            <meshStandardMaterial color={palette.monochrome ? '#d8dce0' : palette.dark ? palette.metal : '#3a4a5a'} roughness={0.5} />
           </mesh>
           {/* 入口雨棚 */}
           <mesh position={[0, actualFloorH * 0.95, d / 2 + 0.5]} castShadow>
@@ -182,7 +182,7 @@ export function SchoolBuilding({ data, palette }: { data: OutdoorObject; palette
           {/* 钟面 */}
           <mesh position={[0, 0.6, d * 0.15 / 2 + 0.01]}>
             <circleGeometry args={[0.25, 24]} />
-            <meshStandardMaterial color={palette.monochrome ? '#ffffff' : '#f5f5f5'} />
+            <meshStandardMaterial color={palette.monochrome ? '#ffffff' : palette.dark ? palette.glowColor : '#f5f5f5'} />
           </mesh>
           {/* 尖顶 */}
           <mesh position={[0, 1.5, 0]} castShadow>

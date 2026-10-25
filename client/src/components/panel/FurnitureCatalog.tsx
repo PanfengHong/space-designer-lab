@@ -52,6 +52,22 @@ const CATALOG: CatalogItem[] = [
   { type: 'decor', name: '落地灯', size: [0.4, 1.6, 0.4], color: '#e8e0d4' },
 ];
 
+/** 办公空间素材库 (复用已有家具类型, 不新增 3D 组件) */
+const OFFICE_CATALOG: CatalogItem[] = [
+  { type: 'table', name: '办公桌', size: [1.6, 0.75, 0.8], color: '#e8e4dc' },
+  { type: 'chair', name: '办公椅', size: [0.5, 0.9, 0.5], color: '#3d3d3d' },
+  { type: 'table', name: '会议桌', size: [3.6, 0.75, 1.4], color: '#5c4033' },
+  { type: 'chair', name: '会议椅', size: [0.5, 0.9, 0.5], color: '#8b7355' },
+  { type: 'cabinet', name: '文件柜', size: [1.6, 1.8, 0.45], color: '#d4c5b0' },
+  { type: 'cabinet', name: '茶水柜', size: [2.0, 0.9, 0.6], color: '#e0e0e0' },
+  { type: 'sofa', name: '接待沙发', size: [2.0, 0.85, 0.9], color: '#c8b8a0' },
+  { type: 'decor', name: '绿植盆栽', size: [0.6, 1.2, 0.6], color: '#4a7c59' },
+  { type: 'appliance', name: '饮水机', size: [0.5, 1.1, 0.5], color: '#f0f0f0' },
+  { type: 'fridge', name: '冰箱', size: [0.7, 1.8, 0.65], color: '#e0e0e0' },
+  { type: 'sink', name: '洗手台', size: [0.7, 0.85, 0.5], color: '#ffffff' },
+  { type: 'toilet', name: '马桶', size: [0.4, 0.8, 0.65], color: '#fafafa' },
+];
+
 function renderCatalogFurniture(data: Furniture) {
   switch (data.type) {
     case 'bed': return <Bed data={data} />;
@@ -70,8 +86,8 @@ function renderCatalogFurniture(data: Furniture) {
   }
 }
 
-/** 缩略图键: 家具类型即唯一外观 (尺寸/颜色随类型固定) */
-const thumbKey = (item: CatalogItem) => `furniture-${item.type}`;
+/** 缩略图键: 类型 + 名称 (住宅/办公素材同名同型但尺寸不同, 需区分) */
+const thumbKey = (item: CatalogItem) => `furniture-${item.type}-${item.name}`;
 
 /** 单个素材缩略图 — 由全局捕获宿主离线渲染为透明 PNG */
 function CatalogThumbnail({ item }: { item: CatalogItem }) {
@@ -143,6 +159,10 @@ function setCustomDragImage(e: React.DragEvent) {
 export function FurnitureCatalog() {
   const setDraggingFurniture = useAppStore((s) => s.setDraggingFurniture);
   const setDraggingStructure = useAppStore((s) => s.setDraggingStructure);
+  const activeModelItem = useAppStore((s) => s.activeModelItem);
+
+  const isOffice = activeModelItem?.category === 'office';
+  const catalog = isOffice ? OFFICE_CATALOG : CATALOG;
 
   const handleDragStart = (e: React.DragEvent, item: CatalogItem) => {
     // 与建筑结构素材库互斥, 避免落下时被判成两种元素
@@ -161,12 +181,12 @@ export function FurnitureCatalog() {
   return (
     <div className="p-2">
       <div className="text-[10px] text-gray-400 mb-2 px-1">
-        拖拽家具到设计区域放置
+        {isOffice ? '拖拽办公家具到设计区域放置' : '拖拽家具到设计区域放置'}
       </div>
       <div className="grid grid-cols-2 gap-1.5">
-        {CATALOG.map((item) => (
+        {catalog.map((item) => (
           <div
-            key={item.type}
+            key={`${item.type}-${item.name}`}
             draggable
             onDragStart={(e) => handleDragStart(e, item)}
             onDragEnd={() => setDraggingFurniture(null)}

@@ -9,8 +9,8 @@ import type { OutdoorPalette } from '../../../../constants/outdoorStyles';
  */
 export function Gate({ data, palette }: { data: OutdoorObject; palette: OutdoorPalette }) {
   const [w, h] = data.size;
-  const pillarColor = palette.monochrome ? palette.wall : '#e8eef4';
-  const accentColor = palette.monochrome ? palette.concrete : '#2b6cb0';
+  const pillarColor = palette.monochrome || palette.dark ? palette.wall : '#e8eef4';
+  const accentColor = palette.monochrome || palette.dark ? palette.concrete : '#2b6cb0';
   const pillarW = 0.5;
 
   return (

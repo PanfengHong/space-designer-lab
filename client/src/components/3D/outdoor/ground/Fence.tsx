@@ -24,8 +24,8 @@ export function Fence({ data, palette }: ContentProps) {
     return arr;
   }, [L]);
 
-  const railColor = palette.monochrome ? palette.concrete : '#e8edf2';
-  const pillarColor = palette.monochrome ? palette.wall : '#f0f4f8';
+  const railColor = palette.monochrome || palette.dark ? palette.concrete : '#e8edf2';
+  const pillarColor = palette.monochrome || palette.dark ? palette.wall : '#f0f4f8';
 
   return (
     <group>

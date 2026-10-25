@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import type { GroundItem, OutdoorObject } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
+import { useOutdoorPalette } from '../../constants/outdoorStyles';
 
 /* ============================================================
  * 户外空间总平面图 (俯视)
@@ -10,7 +11,7 @@ import { useAppStore } from '../../store/useAppStore';
  *  - 滚轮缩放 / 拖拽平移 / 双击重置
  * ============================================================ */
 
-const C = {
+const PLAN_LIGHT = {
   bg: '#eef3f8',
   ground: '#ffffff',
   groundStroke: '#d8dee6',
@@ -20,6 +21,9 @@ const C = {
   riverStroke: '#7ab8e0',
   road: '#c2cad4',
   roadStroke: '#aeb8c4',
+  roadElevated: '#b8c2cd',
+  pillar: '#d8dee6',
+  pillarStroke: '#bcc8d4',
   roadLine: '#ffffff',
   building: '#d9ebf9',
   buildingStroke: '#5a9fd4',
@@ -33,9 +37,42 @@ const C = {
   treeStroke: '#7fc07c',
   select: '#16a34a',
   text: '#4a627a',
+  textHalo: '#ffffff',
+};
+
+/** 暗色孪生风格 — 深底 + 冷色发光线条 */
+const PLAN_DARK = {
+  bg: '#060e18',
+  ground: '#0b1622',
+  groundStroke: '#1d3a4f',
+  grass: '#123326',
+  grassStroke: '#1f5340',
+  river: '#0a2c47',
+  riverStroke: '#1d5a7d',
+  road: '#151d27',
+  roadStroke: '#26333f',
+  roadElevated: '#101720',
+  pillar: '#22303d',
+  pillarStroke: '#2f4a5c',
+  roadLine: '#5fe3ff',
+  building: '#1b4a66',
+  buildingStroke: '#3fd8ff',
+  warehouse: '#16222f',
+  warehouseStroke: '#2b465c',
+  car: '#243546',
+  carStroke: '#4a7f9e',
+  truck: '#1d3a52',
+  truckStroke: '#3fd8ff',
+  tree: '#123326',
+  treeStroke: '#2f7d5c',
+  select: '#22d3ee',
+  text: '#9adcf0',
+  textHalo: '#04121c',
 };
 
 export function OutdoorPlan2D() {
+  const palette = useOutdoorPalette();
+  const C = palette.dark ? PLAN_DARK : PLAN_LIGHT;
   const showLabels = useAppStore((s) => s.viewSettings.showLabels);
   const outdoorSceneData = useAppStore((s) => s.outdoorSceneData);
   const setPixelsPerMeter = useAppStore((s) => s.setPixelsPerMeter);
@@ -173,7 +210,7 @@ export function OutdoorPlan2D() {
         <g {...common} style={{ cursor: clickable ? 'pointer' : 'default' }}
           onClick={clickable ? (e) => { e.stopPropagation(); selectGround(item.id); } : undefined}>
           <rect x={-w / 2} y={-d / 2} width={w} height={d} fill={C.river} stroke={C.riverStroke} strokeWidth={0.12} />
-          <rect x={-w / 2 + 0.6} y={-d / 2 + 0.6} width={w - 1.2} height={d - 1.2} fill="none" stroke="#bfe0f5" strokeWidth={0.1} strokeDasharray="0.8 0.6" />
+          <rect x={-w / 2 + 0.6} y={-d / 2 + 0.6} width={w - 1.2} height={d - 1.2} fill="none" stroke={C.riverStroke} strokeWidth={0.1} strokeDasharray="0.8 0.6" />
           {selected && <rect x={-w / 2} y={-d / 2} width={w} height={d} fill="none" stroke={C.select} strokeWidth={0.25} strokeDasharray="0.8 0.5" />}
         </g>
       );
@@ -194,10 +231,10 @@ export function OutdoorPlan2D() {
           onClick={clickable ? (e) => { e.stopPropagation(); selectGround(item.id); } : undefined}>
           {elevated && (
             Array.from({ length: Math.floor((w - 4) / 10) + 1 }, (_, i) => (
-              <circle key={i} cx={-w / 2 + 5 + i * 10} cy={0} r={0.28} fill="#d8dee6" stroke="#bcc8d4" strokeWidth={0.08} />
+              <circle key={i} cx={-w / 2 + 5 + i * 10} cy={0} r={0.28} fill={C.pillar} stroke={C.pillarStroke} strokeWidth={0.08} />
             ))
           )}
-          <rect x={-w / 2} y={-d / 2} width={w} height={d} rx={0.25} ry={0.25} fill={elevated ? '#b8c2cd' : C.road} stroke={C.roadStroke} strokeWidth={0.12} />
+          <rect x={-w / 2} y={-d / 2} width={w} height={d} rx={0.25} ry={0.25} fill={elevated ? C.roadElevated : C.road} stroke={C.roadStroke} strokeWidth={0.12} />
           <RoadMarkings w={w} d={d} lanes={(item as any).lanes === 4 ? 4 : 2} />
           {selected && <rect x={-w / 2} y={-d / 2} width={w} height={d} fill="none" stroke={C.select} strokeWidth={0.25} strokeDasharray="0.8 0.5" />}
         </g>
@@ -339,7 +376,7 @@ export function OutdoorPlan2D() {
           </>
         )}
         {item.type === 'truck' && (
-          <rect x={w / 2 - cabW} y={-d / 2} width={cabW} height={d} fill="#f2f5f9" stroke={stroke} strokeWidth={0.06} />
+          <rect x={w / 2 - cabW} y={-d / 2} width={cabW} height={d} fill={C.warehouse} stroke={stroke} strokeWidth={0.06} />
         )}
         {item.type === 'tree' && (
           <>
@@ -353,7 +390,7 @@ export function OutdoorPlan2D() {
         )}
         {showLabels && (
           <text x={0} y={0} textAnchor="middle" dominantBaseline="middle" fontSize={0.9} fill={C.text}
-            transform={`rotate(${item.rotation})`} style={{ paintOrder: 'stroke' }} stroke="#ffffff" strokeWidth={0.25}>
+            transform={`rotate(${item.rotation})`} style={{ paintOrder: 'stroke' }} stroke={C.textHalo} strokeWidth={0.25}>
             {item.name}
           </text>
         )}

@@ -4,7 +4,7 @@ import type { OutdoorSceneData, ModelItem } from '../types';
  * 户外空间设计 — 数字园区示例场景
  *
  * 视觉风格参考蓝白数字化园区:
- *  - 白色地面基座 + 蓝灰色道路 (白色虚线车道)
+ *  - 白色地面基座 + 柏油道路 (白色虚线车道)
  *  - 东侧/南侧蓝色水面
  *  - 绿色草地斑块
  *  - 东西向高架道路 (白色桥墩 + 卡车)
@@ -28,22 +28,22 @@ export const demoOutdoorScene: OutdoorSceneData = {
     { id: 'g-grass-3', name: '南侧绿地', type: 'grass', position: [-4, 0.23, -23.5], rotation: 0, size: [16, 0.16, 6], color: '#bfe3c0' },
 
     // ===== 高架道路 (东西向, 桥面中心 y=3.2) =====
-    { id: 'g-highway', name: '高架道路', type: 'road', position: [0, 3.2, -8], rotation: 0, size: [86, 0.28, 3.4], color: '#d3dae3' },
+    { id: 'g-highway', name: '高架道路', type: 'road', position: [0, 3.2, -8], rotation: 0, size: [86, 0.28, 3.4], color: '#4a4e54' },
 
     // ===== 地面道路 =====
-    { id: 'g-road-1', name: '东西主干道', type: 'road', position: [0, 0.09, -16.5], rotation: 0, size: [64, 0.18, 6.6], color: '#d3dae3', lanes: 4 },
-    { id: 'g-road-2', name: '东侧南北路', type: 'road', position: [14, 0.09, 6], rotation: 90, size: [43, 0.18, 2.8], color: '#d3dae3' },
-    { id: 'g-road-3', name: '西侧南北路', type: 'road', position: [-25.20, 0.09, 4], rotation: 90, size: [38, 0.18, 2.8], color: '#d3dae3' },
+    { id: 'g-road-1', name: '东西主干道', type: 'road', position: [0, 0.09, -16.5], rotation: 0, size: [64, 0.18, 6.6], color: '#4a4e54', lanes: 4 },
+    { id: 'g-road-2', name: '东侧南北路', type: 'road', position: [14, 0.09, 6], rotation: 90, size: [43, 0.18, 2.8], color: '#4a4e54' },
+    { id: 'g-road-3', name: '西侧南北路', type: 'road', position: [-25.20, 0.09, 4], rotation: 90, size: [38, 0.18, 2.8], color: '#4a4e54' },
 
     // ===== 十字路口 (东西主干道与南北路交点) =====
-    { id: 'g-inter-1', name: '东路交口', type: 'intersection', position: [14, 0.09, -16.5], rotation: 0, size: [3.2, 0.18, 3.2], color: '#d3dae3', branches: 4, arcRadius: 1.4 },
-    { id: 'g-inter-2', name: '西路交口', type: 'intersection', position: [-25.20, 0.09, -16.20], rotation: 0, size: [3.2, 0.18, 3.2], color: '#d3dae3', branches: 3, arcRadius: 1.4 },
+    { id: 'g-inter-1', name: '东路交口', type: 'intersection', position: [14, 0.09, -16.5], rotation: 0, size: [3.2, 0.18, 3.2], color: '#4a4e54', branches: 4, arcRadius: 1.4 },
+    { id: 'g-inter-2', name: '西路交口', type: 'intersection', position: [-25.20, 0.09, -16.20], rotation: 0, size: [3.2, 0.18, 3.2], color: '#4a4e54', branches: 3, arcRadius: 1.4 },
 
     // ===== 高架匝道 (1/4 圆弧, 高架 → 南转向 → 接东侧南北路) =====
     // 曲线: 起点(-12,3.2,0)切线+X → 弧90°转向+Z → 终点(0,0.09,12)切线+Z
     // 原点(14,1.65,-8): 起点世界(2,3.2,-8)落高架✓, 终点世界(14,0.09,4)落东侧南北路✓
     // 匝道: 起点贴高架右边缘 z=-6.3, 终点贴南北路左边缘 x=12.6, 匝道在主路外侧延伸
-    { id: 'g-ramp-1', name: '高架匝道', type: 'ramp', position: [12.6, 0, -6.3], rotation: 0, size: [24, 0.22, 3.2], color: '#d3dae3' },
+    { id: 'g-ramp-1', name: '高架匝道', type: 'ramp', position: [12.6, 0, -6.3], rotation: 0, size: [24, 0.22, 3.2], color: '#4a4e54' },
   ],
   objects: [
     // ===== 建筑 =====

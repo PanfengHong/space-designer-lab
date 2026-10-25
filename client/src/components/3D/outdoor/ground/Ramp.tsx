@@ -197,7 +197,7 @@ export function Ramp({ data, palette }: ContentProps) {
 
       {/* 路面 (沿曲线挤出的三角带) */}
       <mesh geometry={roadGeo} receiveShadow castShadow>
-        <meshStandardMaterial color={palette.road} roughness={0.75} side={THREE.DoubleSide} />
+        <meshStandardMaterial color={palette.road} roughness={0.9} side={THREE.DoubleSide} />
       </mesh>
 
       {/* 起点鼻端: 三角形 A-B-C, AC 贴主路边缘, B 在外侧 */}

@@ -13,9 +13,9 @@ import { ContentProps } from '../GroundItems';
  */
 export function Playground({ data, palette }: ContentProps) {
   const [L, h, W] = data.size;
-  const trackColor = palette.monochrome ? palette.grass : data.color || '#d93636'; // 红色跑道
-  const fieldColor = palette.monochrome ? palette.wall : '#5fb85f'; // 绿色球场
-  const lineColor = '#ffffff';
+  const trackColor = palette.monochrome || palette.dark ? palette.grass : data.color || '#d93636'; // 红色跑道
+  const fieldColor = palette.monochrome ? palette.wall : palette.dark ? '#14352a' : '#5fb85f'; // 绿色球场
+  const lineColor = palette.dark ? palette.roadLine : '#ffffff';
 
   // 跑道宽度 = 总宽 * 0.18
   const trackW = W * 0.18;

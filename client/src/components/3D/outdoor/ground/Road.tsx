@@ -52,7 +52,7 @@ export function Road({ data, palette }: ContentProps) {
       {/* 路面 */}
       <mesh receiveShadow castShadow>
         <roundedBoxGeometry args={[w, h, d, 3, 0.12]} />
-        <meshStandardMaterial color={palette.road} roughness={0.75} />
+        <meshStandardMaterial color={palette.road} roughness={0.9} />
       </mesh>
 
       {/* 两侧白色实线 */}

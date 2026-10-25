@@ -5,6 +5,7 @@ import { Scene } from '../3D/indoor/IndoorScene';
 import { FloorPlan2D } from '../2D/FloorPlan2D';
 import { LIGHTING_OPTIONS, LIGHTING_ICONS } from '../../constants/lighting';
 import { useIndoorShortcuts } from '../../hooks/useIndoorShortcuts';
+import { PerformanceMonitor } from '../panel/PerformanceMonitor';
 import type { Furniture } from '../../types';
 
 export function Viewport() {
@@ -790,7 +791,9 @@ export function Viewport() {
       })()}
 
       {/* === 右侧底部光影面板（在底部信息栏上方） === */}
-      <div className="absolute bottom-12 right-4 z-10 select-none">
+      <div className="absolute bottom-12 right-4 z-10 select-none flex flex-col items-end gap-2">
+        {/* 性能监控悬浮按钮 (位于光影面板上方) */}
+        <PerformanceMonitor />
         <div className="bg-white/95 backdrop-blur-md rounded-lg shadow-lg border border-gray-200 px-3 py-2.5 w-56">
           <div className="flex items-center gap-2 mb-2">
             <div className="flex items-center gap-1.5">

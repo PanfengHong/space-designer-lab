@@ -12,7 +12,12 @@ extend({ RoundedBoxGeometry });
  */
 export function Truck({ data, palette }: { data: OutdoorObject; palette: OutdoorPalette }) {
   const [L, H, W] = data.size;
-  const cargoColor = palette.monochrome ? '#f2f2f2' : data.color;
+  const cargoColor = palette.monochrome
+    ? '#f2f2f2'
+    : palette.useModelColor
+      ? data.color
+      : palette.wall;
+  const cabColor = palette.monochrome || !palette.useModelColor ? palette.wall : '#f7fafc';
   const wheelR = H * 0.17;
 
   // 几何布局 — 车头缩短并紧贴货柜右侧
@@ -58,7 +63,7 @@ export function Truck({ data, palette }: { data: OutdoorObject; palette: Outdoor
       {/* 车头 */}
       <mesh position={[cabX, wheelR * 2 + cabH / 2 - 0.04, 0]} castShadow>
         <roundedBoxGeometry args={[cabL, cabH, W * 0.96, 3, 0.07]} />
-        <meshStandardMaterial color={palette.monochrome ? '#ffffff' : '#f7fafc'} roughness={0.4} metalness={0.12} />
+        <meshStandardMaterial color={cabColor} roughness={0.4} metalness={0.12} />
       </mesh>
 
       {/* 弧形车顶导流罩 — 水平覆盖车顶平面 (直径=车头宽度), 低弧隆起朝上 */}
@@ -69,7 +74,7 @@ export function Truck({ data, palette }: { data: OutdoorObject; palette: Outdoor
       >
         <cylinderGeometry args={[roofR, roofR, cabL * 1.02, 24, 1, false, roofThetaStart, roofThetaLen]} />
         <meshStandardMaterial
-          color={palette.monochrome ? '#ffffff' : '#f7fafc'}
+          color={cabColor}
           roughness={0.4}
           metalness={0.12}
         />

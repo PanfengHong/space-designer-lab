@@ -50,7 +50,7 @@ export function Intersection({ data, palette }: ContentProps) {
       {/* 中央路口方块 */}
       <mesh receiveShadow castShadow position={[0, 0, 0]}>
         <boxGeometry args={[w, h, d]} />
-        <meshStandardMaterial color={palette.road} roughness={0.75} />
+        <meshStandardMaterial color={palette.road} roughness={0.9} />
       </mesh>
 
       {/* 端面延伸条 (无缝衔接外部道路) */}
@@ -63,7 +63,7 @@ export function Intersection({ data, palette }: ContentProps) {
         return (
           <mesh key={`stub-${i}`} position={pos} receiveShadow castShadow>
             <boxGeometry args={s.axis === 'x' ? [s.len, h, d] : [w, h, s.len]} />
-            <meshStandardMaterial color={palette.road} roughness={0.75} />
+            <meshStandardMaterial color={palette.road} roughness={0.9} />
           </mesh>
         );
       })}
@@ -77,7 +77,7 @@ export function Intersection({ data, palette }: ContentProps) {
           receiveShadow
         >
           <ringGeometry args={[0.001, arcR, 24, 1, c.thetaStart, Math.PI / 2]} />
-          <meshStandardMaterial color={palette.road} roughness={0.75} side={THREE.DoubleSide} />
+          <meshStandardMaterial color={palette.road} roughness={0.9} side={THREE.DoubleSide} />
         </mesh>
       ))}
 

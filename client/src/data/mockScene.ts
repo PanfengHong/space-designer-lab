@@ -1,4 +1,4 @@
-import type { SceneData, ModelItem } from '../types';
+import type { SceneData, ModelItem, Room, WallSegment, Door, Window, FrenchWindow, Furniture } from '../types';
 
 /**
  * 一居室户型场景 (单身公寓)
@@ -981,16 +981,419 @@ export function createFurnitureShowcase(item: ModelItem): SceneData {
   };
 }
 
+// ===== 办公空间场景 (写字楼 / 办公) =====
+
+interface RectRoomOptions {
+  id: string;
+  name: string;
+  nameEn: string;
+  description: string;
+  tags: string[];
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
+  height: number;
+  // 各面墙的开口: n=北(z0) / e=东(x1) / s=南(z1) / w=西(x0)
+  openings?: Partial<Record<'n' | 'e' | 's' | 'w', NonNullable<WallSegment['cutout']>>>;
+  doors?: Door[];
+  windows?: Window[];
+  frenchWindows?: FrenchWindow[];
+  furniture?: Furniture[];
+}
+
+/** 生成矩形房间 (四面墙 + 可选墙洞), 用于快速搭建办公空间 */
+function makeRectRoom(o: RectRoomOptions): Room {
+  const { x0, x1, z0, z1 } = o;
+  const wall = (
+    key: 'n' | 'e' | 's' | 'w',
+    start: [number, number],
+    end: [number, number],
+  ): WallSegment => ({
+    id: `${o.id}-${key}`,
+    start,
+    end,
+    height: o.height,
+    ...(o.openings?.[key] ? { cutout: o.openings[key] } : {}),
+  });
+
+  return {
+    id: o.id,
+    name: o.name,
+    nameEn: o.nameEn,
+    description: o.description,
+    tags: o.tags,
+    floorHeight: 0,
+    walls: [
+      wall('n', [x0, z0], [x1, z0]),
+      wall('e', [x1, z0], [x1, z1]),
+      wall('s', [x1, z1], [x0, z1]),
+      wall('w', [x0, z1], [x0, z0]),
+    ],
+    doors: o.doors ?? [],
+    windows: o.windows ?? [],
+    bayWindows: [],
+    frenchWindows: o.frenchWindows ?? [],
+    furniture: o.furniture ?? [],
+  };
+}
+
+/** 批量生成工位 (桌 + 椅) */
+function makeWorkstations(
+  prefix: string,
+  cols: number,
+  rows: number,
+  origin: [number, number],
+  gap: [number, number],
+): Furniture[] {
+  const list: Furniture[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = origin[0] + c * gap[0];
+      const z = origin[1] + r * gap[1];
+      list.push({
+        id: `${prefix}-desk-${r}-${c}`,
+        name: '办公桌',
+        position: [x, 0, z],
+        rotation: 0,
+        size: [1.6, 0.75, 0.8],
+        type: 'table',
+        color: '#e8e4dc',
+      });
+      list.push({
+        id: `${prefix}-chair-${r}-${c}`,
+        name: '办公椅',
+        position: [x, 0, z + 0.85],
+        rotation: 0,
+        size: [0.5, 0.9, 0.5],
+        type: 'chair',
+        color: '#3d3d3d',
+      });
+    }
+  }
+  return list;
+}
+
+/** 写字楼标准层: 开放办公区 + 前台接待 + 会议室 + 独立办公室 + 茶水间 + 卫生间 */
+export const officeFloorScene: SceneData = {
+  wallThickness: 0.2,
+  ceilingHeight: 3.2,
+  floorThickness: 0.15,
+  rooms: [
+    makeRectRoom({
+      id: 'office-open',
+      name: '开放办公区',
+      nameEn: 'Open Workspace',
+      description: '3 排共 9 个工位, 北向与西向采光',
+      tags: ['写字楼', '开放办公'],
+      x0: 0, x1: 13, z0: 0, z1: 8,
+      height: 3.2,
+      openings: {
+        n: { start: 2, end: 11, sill: 0.9, top: 2.6 },
+        e: { start: 0.8, end: 3.2, sill: 0, top: 2.6 },
+        s: { start: 10.6, end: 12, sill: 0, top: 2.3 },
+        w: { start: 2, end: 6, sill: 0.9, top: 2.6 },
+      },
+      windows: [
+        { id: 'win-of-n1', position: [4.5, 0, 0], width: 4, height: 1.7, sill: 0.9, rotation: 180 },
+        { id: 'win-of-n2', position: [8.5, 0, 0], width: 4, height: 1.7, sill: 0.9, rotation: 180 },
+        { id: 'win-of-w1', position: [0, 0, 4], width: 3.6, height: 1.7, sill: 0.9, rotation: 270 },
+      ],
+      furniture: [
+        ...makeWorkstations('of', 3, 3, [2.6, 2.2], [2.6, 2.2]),
+        { id: 'of-cab-1', name: '文件柜', position: [10.9, 0, 0.4], rotation: 180, size: [1.6, 1.8, 0.45], type: 'cabinet', color: '#d4c5b0' },
+        { id: 'of-cab-2', name: '文件柜', position: [12.3, 0, 5.6], rotation: 270, size: [1.6, 1.8, 0.45], type: 'cabinet', color: '#d4c5b0' },
+        { id: 'of-printer', name: '打印机', position: [12.3, 0, 7.4], rotation: 0, size: [0.7, 1.0, 0.6], type: 'appliance', color: '#e0e0e0' },
+        { id: 'of-plant-1', name: '绿植', position: [0.6, 0, 0.6], rotation: 0, size: [0.7, 1.2, 0.7], type: 'decor', color: '#4a7c59' },
+        { id: 'of-plant-2', name: '绿植', position: [0.6, 0, 7.3], rotation: 0, size: [0.7, 1.2, 0.7], type: 'decor', color: '#4a7c59' },
+      ],
+    }),
+    makeRectRoom({
+      id: 'office-reception',
+      name: '前台接待',
+      nameEn: 'Reception',
+      description: '入口接待与等候区, 连接开放办公区与会议室',
+      tags: ['接待', '写字楼'],
+      x0: 13, x1: 20, z0: 0, z1: 4,
+      height: 3.2,
+      openings: {
+        n: { start: 2, end: 6, sill: 0.9, top: 2.6 },
+        e: { start: 1.5, end: 2.5, sill: 0, top: 2.4 },
+        s: { start: 3.5, end: 4.5, sill: 0, top: 2.4 },
+        w: { start: 0.8, end: 3.2, sill: 0, top: 2.6 },
+      },
+      doors: [
+        { id: 'd-of-entry', position: [20, 0, 2], width: 1.0, height: 2.4, rotation: 90, style: 'glass' },
+      ],
+      windows: [
+        { id: 'win-of-r1', position: [17, 0, 0], width: 3.6, height: 1.7, sill: 0.9, rotation: 180 },
+      ],
+      furniture: [
+        { id: 'of-desk', name: '前台', position: [16.2, 0, 1.0], rotation: 0, size: [2.4, 1.1, 0.8], type: 'table', color: '#5c4033' },
+        { id: 'of-desk-chair', name: '前台椅', position: [16.2, 0, 0.4], rotation: 180, size: [0.5, 0.9, 0.5], type: 'chair', color: '#3d3d3d' },
+        { id: 'of-sofa', name: '接待沙发', position: [17.6, 0, 3.2], rotation: 180, size: [2.0, 0.85, 0.9], type: 'sofa', color: '#c8b8a0' },
+        { id: 'of-tea', name: '茶几', position: [17.6, 0, 2.2], rotation: 0, size: [1.0, 0.45, 0.6], type: 'table', color: '#5c4033' },
+        { id: 'of-r-plant', name: '绿植', position: [19.3, 0, 0.6], rotation: 0, size: [0.7, 1.4, 0.7], type: 'decor', color: '#4a7c59' },
+      ],
+    }),
+    makeRectRoom({
+      id: 'office-meeting',
+      name: '会议室',
+      nameEn: 'Meeting Room',
+      description: '8 人会议桌, 连接接待区与独立办公室',
+      tags: ['会议', '洽谈'],
+      x0: 13, x1: 20, z0: 4, z1: 8,
+      height: 3.2,
+      openings: {
+        n: { start: 2.5, end: 3.5, sill: 0, top: 2.4 },
+        e: { start: 0.8, end: 3.2, sill: 0.9, top: 2.6 },
+        s: { start: 3.5, end: 4.5, sill: 0, top: 2.4 },
+      },
+      windows: [
+        { id: 'win-of-m1', position: [20, 0, 6], width: 2.4, height: 1.7, sill: 0.9, rotation: 90 },
+      ],
+      furniture: [
+        { id: 'of-m-table', name: '会议桌', position: [16.5, 0, 6], rotation: 0, size: [3.6, 0.75, 1.4], type: 'table', color: '#5c4033' },
+        { id: 'of-m-c1', name: '会议椅', position: [14.9, 0, 5.1], rotation: 180, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'of-m-c2', name: '会议椅', position: [16.5, 0, 5.1], rotation: 180, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'of-m-c3', name: '会议椅', position: [18.1, 0, 5.1], rotation: 180, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'of-m-c4', name: '会议椅', position: [14.9, 0, 6.9], rotation: 0, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'of-m-c5', name: '会议椅', position: [16.5, 0, 6.9], rotation: 0, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'of-m-c6', name: '会议椅', position: [18.1, 0, 6.9], rotation: 0, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'of-m-c7', name: '会议椅', position: [13.9, 0, 6], rotation: 90, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'of-m-c8', name: '会议椅', position: [19.1, 0, 6], rotation: 270, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'of-m-cab', name: '茶水柜', position: [18.8, 0, 7.6], rotation: 180, size: [1.6, 0.9, 0.4], type: 'cabinet', color: '#e0e0e0' },
+        { id: 'of-m-plant', name: '绿植', position: [19.4, 0, 4.5], rotation: 0, size: [0.7, 1.2, 0.7], type: 'decor', color: '#4a7c59' },
+      ],
+    }),
+    makeRectRoom({
+      id: 'office-pantry',
+      name: '茶水间',
+      nameEn: 'Pantry',
+      description: '茶水柜、冰箱与休息桌椅',
+      tags: ['茶水间', '休息'],
+      x0: 0, x1: 6, z0: 8, z1: 12,
+      height: 3.2,
+      openings: {
+        n: { start: 1, end: 2.4, sill: 0, top: 2.3 },
+        e: { start: 1, end: 2, sill: 0, top: 2.2 },
+        s: { start: 1, end: 5, sill: 0.9, top: 2.6 },
+      },
+      windows: [
+        { id: 'win-of-pan1', position: [3, 0, 12], width: 3.6, height: 1.7, sill: 0.9, rotation: 0 },
+      ],
+      furniture: [
+        { id: 'of-pan-cab', name: '茶水柜', position: [1.6, 0, 11.5], rotation: 0, size: [3.0, 0.9, 0.6], type: 'cabinet', color: '#e0e0e0' },
+        { id: 'of-pan-fridge', name: '冰箱', position: [4.0, 0, 11.5], rotation: 0, size: [0.7, 1.8, 0.65], type: 'fridge', color: '#e0e0e0' },
+        { id: 'of-pan-water', name: '饮水机', position: [5.5, 0, 11.3], rotation: 0, size: [0.5, 1.1, 0.5], type: 'appliance', color: '#f0f0f0' },
+        { id: 'of-pan-table', name: '休闲桌', position: [2.4, 0, 9.8], rotation: 0, size: [1.6, 0.75, 0.9], type: 'table', color: '#d4c5b0' },
+        { id: 'of-pan-c1', name: '休闲椅', position: [1.8, 0, 9.0], rotation: 180, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'of-pan-c2', name: '休闲椅', position: [3.0, 0, 9.0], rotation: 180, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'of-pan-plant', name: '绿植', position: [5.4, 0, 8.6], rotation: 0, size: [0.7, 1.2, 0.7], type: 'decor', color: '#4a7c59' },
+      ],
+    }),
+    makeRectRoom({
+      id: 'office-restroom',
+      name: '卫生间',
+      nameEn: 'Restroom',
+      description: '办公层卫生间',
+      tags: ['卫生间'],
+      x0: 6, x1: 13, z0: 8, z1: 12,
+      height: 3.2,
+      openings: {
+        w: { start: 2, end: 3, sill: 0, top: 2.2 },
+        s: { start: 2, end: 5, sill: 0.9, top: 2.6 },
+      },
+      windows: [
+        { id: 'win-of-wc1', position: [9.5, 0, 12], width: 3.6, height: 1.7, sill: 0.9, rotation: 0 },
+      ],
+      furniture: [
+        { id: 'of-wc-1', name: '马桶', position: [7.6, 0, 8.7], rotation: 180, size: [0.4, 0.8, 0.65], type: 'toilet', color: '#fafafa' },
+        { id: 'of-wc-2', name: '马桶', position: [8.8, 0, 8.7], rotation: 180, size: [0.4, 0.8, 0.65], type: 'toilet', color: '#fafafa' },
+        { id: 'of-wc-s1', name: '洗手台', position: [11.2, 0, 8.7], rotation: 180, size: [0.7, 0.85, 0.5], type: 'sink', color: '#ffffff' },
+        { id: 'of-wc-s2', name: '洗手台', position: [12.0, 0, 8.7], rotation: 180, size: [0.7, 0.85, 0.5], type: 'sink', color: '#ffffff' },
+      ],
+    }),
+    makeRectRoom({
+      id: 'office-private',
+      name: '独立办公室',
+      nameEn: 'Private Office',
+      description: '经理办公桌、会客沙发与储物柜',
+      tags: ['独立办公', '经理室'],
+      x0: 13, x1: 20, z0: 8, z1: 12,
+      height: 3.2,
+      openings: {
+        n: { start: 2.5, end: 3.5, sill: 0, top: 2.4 },
+        e: { start: 1, end: 3, sill: 0.9, top: 2.6 },
+        s: { start: 2, end: 6, sill: 0.9, top: 2.6 },
+      },
+      windows: [
+        { id: 'win-of-p1', position: [20, 0, 10], width: 1.8, height: 1.7, sill: 0.9, rotation: 90 },
+        { id: 'win-of-p2', position: [16, 0, 12], width: 3.6, height: 1.7, sill: 0.9, rotation: 0 },
+      ],
+      furniture: [
+        { id: 'of-p-desk', name: '办公桌', position: [16.2, 0, 9.3], rotation: 0, size: [1.8, 0.75, 0.9], type: 'table', color: '#5c4033' },
+        { id: 'of-p-chair', name: '办公椅', position: [16.2, 0, 10.1], rotation: 0, size: [0.5, 0.9, 0.5], type: 'chair', color: '#3d3d3d' },
+        { id: 'of-p-g1', name: '会客椅', position: [15.2, 0, 11.0], rotation: 180, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'of-p-g2', name: '会客椅', position: [17.2, 0, 11.0], rotation: 180, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'of-p-cab', name: '文件柜', position: [13.4, 0, 10.6], rotation: 90, size: [2.0, 1.8, 0.45], type: 'cabinet', color: '#d4c5b0' },
+        { id: 'of-p-sofa', name: '会客沙发', position: [18.8, 0, 11.2], rotation: 180, size: [1.8, 0.85, 0.9], type: 'sofa', color: '#c8b8a0' },
+        { id: 'of-p-plant', name: '绿植', position: [19.4, 0, 8.6], rotation: 0, size: [0.7, 1.2, 0.7], type: 'decor', color: '#4a7c59' },
+      ],
+    }),
+  ],
+};
+
+/** 开放办公区 (单一大空间) */
+export const openOfficeScene: SceneData = {
+  wallThickness: 0.2,
+  ceilingHeight: 3.2,
+  floorThickness: 0.15,
+  rooms: [
+    makeRectRoom({
+      id: 'open-office',
+      name: '开放办公区',
+      nameEn: 'Open Workspace',
+      description: '开放工位与洽谈区, 适合团队协作',
+      tags: ['办公', '开放办公'],
+      x0: 0, x1: 14, z0: 0, z1: 9,
+      height: 3.2,
+      openings: {
+        n: { start: 2, end: 12, sill: 0.9, top: 2.6 },
+        w: { start: 2, end: 7, sill: 0.9, top: 2.6 },
+        s: { start: 6.8, end: 8, sill: 0, top: 2.4 },
+      },
+      doors: [
+        { id: 'd-oo-entry', position: [7, 0, 9], width: 1.0, height: 2.4, rotation: 0, style: 'glass' },
+      ],
+      windows: [
+        { id: 'win-oo-n1', position: [4, 0, 0], width: 3.6, height: 1.7, sill: 0.9, rotation: 180 },
+        { id: 'win-oo-n2', position: [8.5, 0, 0], width: 4, height: 1.7, sill: 0.9, rotation: 180 },
+        { id: 'win-oo-w1', position: [0, 0, 4.5], width: 4, height: 1.7, sill: 0.9, rotation: 270 },
+      ],
+      furniture: [
+        ...makeWorkstations('oo', 3, 3, [2.6, 2.2], [2.6, 2.4]),
+        { id: 'oo-sofa', name: '洽谈沙发', position: [10.5, 0, 7.4], rotation: 180, size: [2.0, 0.85, 0.9], type: 'sofa', color: '#d4c5b0' },
+        { id: 'oo-tea', name: '茶几', position: [10.5, 0, 6.4], rotation: 0, size: [1.0, 0.45, 0.6], type: 'table', color: '#5c4033' },
+        { id: 'oo-chat', name: '洽谈椅', position: [8.9, 0, 6.4], rotation: 90, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'oo-cab', name: '文件柜', position: [13.4, 0, 1.4], rotation: 270, size: [1.6, 1.8, 0.45], type: 'cabinet', color: '#d4c5b0' },
+        { id: 'oo-plant-1', name: '绿植', position: [0.6, 0, 0.6], rotation: 0, size: [0.7, 1.2, 0.7], type: 'decor', color: '#4a7c59' },
+        { id: 'oo-plant-2', name: '绿植', position: [13.4, 0, 8.4], rotation: 0, size: [0.7, 1.2, 0.7], type: 'decor', color: '#4a7c59' },
+      ],
+    }),
+  ],
+};
+
+/** 会议室 (8 人) */
+export const meetingRoomScene: SceneData = {
+  wallThickness: 0.2,
+  ceilingHeight: 3.2,
+  floorThickness: 0.15,
+  rooms: [
+    makeRectRoom({
+      id: 'meeting-room',
+      name: '会议室',
+      nameEn: 'Meeting Room',
+      description: '8 人会议桌与演示柜',
+      tags: ['会议', '洽谈'],
+      x0: 0, x1: 8, z0: 0, z1: 6,
+      height: 3.2,
+      openings: {
+        n: { start: 2, end: 6, sill: 0.9, top: 2.6 },
+        s: { start: 3.8, end: 4.8, sill: 0, top: 2.4 },
+      },
+      doors: [
+        { id: 'd-mr-entry', position: [4, 0, 6], width: 1.0, height: 2.4, rotation: 0, style: 'glass' },
+      ],
+      windows: [
+        { id: 'win-mr', position: [4, 0, 0], width: 3.6, height: 1.7, sill: 0.9, rotation: 180 },
+      ],
+      furniture: [
+        { id: 'mr-table', name: '会议桌', position: [4, 0, 3], rotation: 0, size: [4.0, 0.75, 1.4], type: 'table', color: '#5c4033' },
+        { id: 'mr-c1', name: '会议椅', position: [3.0, 0, 2.1], rotation: 180, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'mr-c2', name: '会议椅', position: [4.0, 0, 2.1], rotation: 180, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'mr-c3', name: '会议椅', position: [5.0, 0, 2.1], rotation: 180, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'mr-c4', name: '会议椅', position: [3.0, 0, 3.9], rotation: 0, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'mr-c5', name: '会议椅', position: [4.0, 0, 3.9], rotation: 0, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'mr-c6', name: '会议椅', position: [5.0, 0, 3.9], rotation: 0, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'mr-c7', name: '会议椅', position: [1.9, 0, 3], rotation: 90, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'mr-c8', name: '会议椅', position: [6.1, 0, 3], rotation: 270, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'mr-cab', name: '演示柜', position: [7.6, 0, 3], rotation: 270, size: [1.6, 1.8, 0.35], type: 'cabinet', color: '#3d3d3d' },
+        { id: 'mr-plant-1', name: '绿植', position: [0.7, 0, 0.7], rotation: 0, size: [0.7, 1.2, 0.7], type: 'decor', color: '#4a7c59' },
+        { id: 'mr-plant-2', name: '绿植', position: [7.3, 0, 5.3], rotation: 0, size: [0.7, 1.2, 0.7], type: 'decor', color: '#4a7c59' },
+      ],
+    }),
+  ],
+};
+
+/** 独立办公室 */
+export const privateOfficeScene: SceneData = {
+  wallThickness: 0.2,
+  ceilingHeight: 3.2,
+  floorThickness: 0.15,
+  rooms: [
+    makeRectRoom({
+      id: 'private-office',
+      name: '独立办公室',
+      nameEn: 'Private Office',
+      description: '办公桌、会客区与储物柜',
+      tags: ['办公', '独立办公'],
+      x0: 0, x1: 6, z0: 0, z1: 6,
+      height: 3.2,
+      openings: {
+        n: { start: 1.6, end: 4.4, sill: 0.9, top: 2.6 },
+        e: { start: 1.6, end: 4.4, sill: 0.9, top: 2.6 },
+        s: { start: 2.5, end: 3.5, sill: 0, top: 2.4 },
+      },
+      doors: [
+        { id: 'd-po-entry', position: [3, 0, 6], width: 1.0, height: 2.4, rotation: 0 },
+      ],
+      windows: [
+        { id: 'win-po-n', position: [3, 0, 0], width: 2.8, height: 1.7, sill: 0.9, rotation: 180 },
+        { id: 'win-po-e', position: [6, 0, 3], width: 2.8, height: 1.7, sill: 0.9, rotation: 90 },
+      ],
+      furniture: [
+        { id: 'po-desk', name: '办公桌', position: [3, 0, 2.2], rotation: 0, size: [1.8, 0.75, 0.9], type: 'table', color: '#5c4033' },
+        { id: 'po-chair', name: '办公椅', position: [3, 0, 1.4], rotation: 180, size: [0.5, 0.9, 0.5], type: 'chair', color: '#3d3d3d' },
+        { id: 'po-g1', name: '会客椅', position: [2.2, 0, 3.5], rotation: 0, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'po-g2', name: '会客椅', position: [3.8, 0, 3.5], rotation: 0, size: [0.5, 0.9, 0.5], type: 'chair', color: '#8b7355' },
+        { id: 'po-cab', name: '文件柜', position: [0.4, 0, 4.4], rotation: 270, size: [1.8, 1.8, 0.45], type: 'cabinet', color: '#d4c5b0' },
+        { id: 'po-sofa', name: '会客沙发', position: [4.4, 0, 4.9], rotation: 180, size: [1.8, 0.85, 0.9], type: 'sofa', color: '#d4c5b0' },
+        { id: 'po-plant', name: '绿植', position: [5.4, 0, 0.6], rotation: 0, size: [0.7, 1.2, 0.7], type: 'decor', color: '#4a7c59' },
+      ],
+    }),
+  ],
+};
+
+/** 办公类型 → 场景 */
+export function getOfficeScene(type?: string): SceneData {
+  switch (type) {
+    case 'open-office':
+      return openOfficeScene;
+    case 'meeting-room':
+      return meetingRoomScene;
+    case 'private-office':
+      return privateOfficeScene;
+    case 'office-floor':
+    default:
+      return officeFloorScene;
+  }
+}
+
 /**
  * 根据模型选择设计器场景数据
  * - furniture 类: 返回单品展示场景
  * - apartment 类: 根据 type 返回对应户型 (one-bed/two-bed/three-bed/modern)
+ * - office 类: 根据 type 返回对应办公空间
  * - 无模型 (默认): 返回完整三居户型
  */
 export function getSceneForModel(model: ModelItem | null): SceneData {
   if (!model) return mockSceneData;
   if (model.category === 'furniture') {
     return createFurnitureShowcase(model);
+  }
+  if (model.category === 'office') {
+    return getOfficeScene(model.type);
   }
   // apartment: 根据 type 返回对应户型
   switch (model.type) {

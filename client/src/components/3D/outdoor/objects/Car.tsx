@@ -375,7 +375,11 @@ export function Car({
   palette: OutdoorPalette
 }) {
   const [L, H, W] = data.size
-  const bodyColor = palette.monochrome ? '#ffffff' : data.color
+  const bodyColor = palette.monochrome
+    ? '#ffffff'
+    : palette.useModelColor
+      ? data.color
+      : palette.metal
 
   const bodyGeo = useBodyGeometry()
   const cabinFrameGeo = useCabinFrameGeometry()
