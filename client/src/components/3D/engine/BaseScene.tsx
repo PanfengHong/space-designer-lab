@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { useAppStore } from '../../../store/useAppStore';
 import { screenToFloor, snapToGrid } from '../../../utils/r3fBridge';
 import { PerformanceProbe } from './PerformanceProbe';
+import { exportBridge, EXPORT_CONTENT_GROUP } from '../../../utils/exportBridge';
 import type {
   BaseSceneProps,
   ViewMode,
@@ -15,6 +16,22 @@ import type {
 } from './types';
 
 /* ==================== 浏览器手势拦截 ==================== */
+
+/**
+ * 场景导出登记: 挂载时把 DesignerContent 组登记到 exportBridge,
+ * 卸载 (切 2D 平面图/换页) 时清除, 导出面板据此判断 3D 场景是否可用。
+ */
+function ExportSceneReporter() {
+  const scene = useThree((s) => s.scene);
+  useEffect(() => {
+    exportBridge.content = scene.getObjectByName(EXPORT_CONTENT_GROUP) ?? null;
+    return () => {
+      exportBridge.content = null;
+    };
+  }, [scene]);
+  return null;
+}
+
 export function DisableBrowserGestures() {
   const gl = useThree((s) => s.gl);
   const domEl = gl.domElement;
@@ -479,6 +496,7 @@ export function BaseScene(props: BaseSceneProps) {
 
         <EngineLighting mode={lighting} configs={lightingConfigs} />
         <StudioEnvironment />
+        <ExportSceneReporter />
 
         {grid && (
           <Grid
@@ -500,7 +518,8 @@ export function BaseScene(props: BaseSceneProps) {
           <EngineDragGhost ref={ghostHandleRef} size={dragSize} />
         )}
 
-        {children}
+        {/* 设计内容根组: 导出 GLB 时只导这个组 (灯光/网格/Environment 等引擎辅助在组外) */}
+        <group name={EXPORT_CONTENT_GROUP}>{children}</group>
       </Suspense>
     </Canvas>
     </div>

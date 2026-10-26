@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
-import { TopBar } from './components/layout/TopBar';
+import { TopBar } from './components/layout/Header';
 import { LeftPanel } from './components/layout/LeftPanel';
 import { Viewport } from './components/layout/Viewport';
-import { OutdoorLeftPanel } from './components/layout/OutdoorLeftPanel';
-import { OutdoorViewport } from './components/layout/OutdoorViewport';
 import { Login } from './components/auth/Login';
 import { Home } from './components/home/Home';
 import { ModelManagement } from './components/model/ModelManagement';
@@ -173,10 +171,10 @@ function OutdoorDesignerPage() {
       </div>
       <div className="flex-1 flex flex-row overflow-hidden min-h-0 relative">
         <div className={`transition-all duration-300 ease-out overflow-hidden ${leftWidth}`}>
-          <OutdoorLeftPanel />
+          <LeftPanel />
         </div>
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <OutdoorViewport />
+          <Viewport />
         </div>
       </div>
     </div>

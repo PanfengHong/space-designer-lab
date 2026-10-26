@@ -132,9 +132,11 @@ interface AppState {
   beginTransform: (id: string, mode: 'move' | 'rotate') => void;
   endTransform: () => void;
 
-  // ===== 撤销 / 重做 (仅室内 sceneData) =====
-  past: SceneData[];
-  future: SceneData[];
+  // ===== 撤销 / 重做 =====
+  // 栈内容随 historyMode 变化 (室内 sceneData / 户外 outdoorSceneData 二选一),
+  // 切换模式或切换模型时清空。读取 past.length 判断按钮可用性即可。
+  past: HistoryEntry[];
+  future: HistoryEntry[];
   undo: () => void;
   redo: () => void;
 
@@ -204,13 +206,25 @@ interface AppState {
 const HISTORY_LIMIT = 80;
 
 /**
- * 取一份"修改前"的场景历史快照。
- * sceneData 全程以不可变方式更新 (map/spread), 因此直接存引用即可安全回溯。
+ * 历史条目: 室内与户外共用同一对 past/future 栈, 由 historyMode 决定栈里装的是什么。
+ * sceneData / outdoorSceneData 全程以不可变方式更新 (map/spread), 直接存引用即可安全回溯。
+ */
+type HistoryEntry = SceneData | OutdoorSceneData;
+
+interface HistorySlice {
+  past: HistoryEntry[];
+  future: HistoryEntry[];
+}
+
+/**
+ * 取一份"修改前"的场景历史快照 (按当前设计器模式选择对应数据)。
  * 每次记录会清空重做栈 (新分支覆盖旧未来)。
  */
-function snapshot(state: AppState): { past: SceneData[]; future: SceneData[] } {
+function snapshot(state: AppState): HistorySlice {
+  const current: HistoryEntry =
+    state.designerMode === 'outdoor' ? state.outdoorSceneData : state.sceneData;
   return {
-    past: [...state.past, state.sceneData].slice(-HISTORY_LIMIT),
+    past: [...state.past, current].slice(-HISTORY_LIMIT),
     future: [],
   };
 }
@@ -256,7 +270,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 
   designerMode: 'interior',
-  // 切换设计器模式: 替换模型分层、重置风格、清空选中
+  // 切换设计器模式: 替换模型分层、重置风格、清空选中与历史
+  // 历史栈是两种模式共用的, 模式切换后旧的撤销记录已无意义, 必须清空
   setDesignerMode: (mode) =>
     set(() => {
       if (mode === 'outdoor') {
@@ -269,6 +284,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           designStyleId: 'park2',
           selectedGroundId: null,
           selectedOutdoorObjectId: null,
+          past: [],
+          future: [],
         };
       }
       return {
@@ -280,6 +297,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         designStyleId: 'base',
         selectedStructureId: null,
         selectedFurnitureId: null,
+        past: [],
+        future: [],
       };
     }),
 
@@ -535,29 +554,60 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => {
       if (state.past.length === 0) return {};
       const prev = state.past[state.past.length - 1];
-      return {
-        sceneData: prev,
-        spaces: spacesOf(prev),
+      const common = {
         past: state.past.slice(0, -1),
-        future: [...state.future, state.sceneData].slice(-HISTORY_LIMIT),
-        // 回溯后旧选中对象可能已不存在, 直接清空
+        future: [
+          ...state.future,
+          (state.designerMode === 'outdoor' ? state.outdoorSceneData : state.sceneData) as HistoryEntry,
+        ].slice(-HISTORY_LIMIT),
+        isDirty: true,
+      };
+      // 户外: 只回放 outdoorSceneData, 选中可能已失效 → 清空
+      if (state.designerMode === 'outdoor') {
+        return {
+          ...common,
+          outdoorSceneData: prev as OutdoorSceneData,
+          selectedGroundId: null,
+          selectedOutdoorObjectId: null,
+        };
+      }
+      // 室内: 回放 sceneData 并重建空间列表
+      const next = prev as SceneData;
+      return {
+        ...common,
+        sceneData: next,
+        spaces: spacesOf(next),
         selectedFurnitureId: null,
         selectedStructureId: null,
-        isDirty: true,
       };
     }),
   redo: () =>
     set((state) => {
       if (state.future.length === 0) return {};
       const next = state.future[state.future.length - 1];
-      return {
-        sceneData: next,
-        spaces: spacesOf(next),
+      const common = {
         future: state.future.slice(0, -1),
-        past: [...state.past, state.sceneData].slice(-HISTORY_LIMIT),
+        past: [
+          ...state.past,
+          (state.designerMode === 'outdoor' ? state.outdoorSceneData : state.sceneData) as HistoryEntry,
+        ].slice(-HISTORY_LIMIT),
+        isDirty: true,
+      };
+      if (state.designerMode === 'outdoor') {
+        return {
+          ...common,
+          outdoorSceneData: next as OutdoorSceneData,
+          selectedGroundId: null,
+          selectedOutdoorObjectId: null,
+        };
+      }
+      const value = next as SceneData;
+      return {
+        ...common,
+        sceneData: value,
+        spaces: spacesOf(value),
         selectedFurnitureId: null,
         selectedStructureId: null,
-        isDirty: true,
       };
     }),
 
@@ -702,6 +752,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       outdoorSceneData: scene,
       selectedGroundId: null,
       selectedOutdoorObjectId: null,
+      past: [],
+      future: [],
     }),
 
   selectedGroundId: null,
@@ -720,6 +772,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addGroundItem: (item) =>
     set((state) => ({
+      ...snapshot(state),
       outdoorSceneData: {
         ...state.outdoorSceneData,
         ground: [...state.outdoorSceneData.ground, item],
@@ -731,6 +784,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateGroundItem: (id, patch) =>
     set((state) => ({
+      ...snapshot(state),
       outdoorSceneData: {
         ...state.outdoorSceneData,
         ground: state.outdoorSceneData.ground.map((g) =>
@@ -742,6 +796,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   removeGroundItem: (id) =>
     set((state) => ({
+      ...snapshot(state),
       outdoorSceneData: {
         ...state.outdoorSceneData,
         ground: state.outdoorSceneData.ground.filter((g) => g.id !== id),
@@ -752,6 +807,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addOutdoorObject: (item) =>
     set((state) => ({
+      ...snapshot(state),
       outdoorSceneData: {
         ...state.outdoorSceneData,
         objects: [...state.outdoorSceneData.objects, item],
@@ -763,6 +819,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateOutdoorObject: (id, patch) =>
     set((state) => ({
+      ...snapshot(state),
       outdoorSceneData: {
         ...state.outdoorSceneData,
         objects: state.outdoorSceneData.objects.map((o) =>
@@ -774,6 +831,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   removeOutdoorObject: (id) =>
     set((state) => ({
+      ...snapshot(state),
       outdoorSceneData: {
         ...state.outdoorSceneData,
         objects: state.outdoorSceneData.objects.filter((o) => o.id !== id),
@@ -803,6 +861,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedGroundId: null,
       selectedOutdoorObjectId: null,
       isDirty: false,
+      // 换园区后历史无意义, 清空
+      past: [],
+      future: [],
     });
   },
 

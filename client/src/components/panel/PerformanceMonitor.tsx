@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Activity, X } from 'lucide-react';
 import { usePerformanceStore } from '../../store/usePerformanceStore';
 import { useAppStore } from '../../store/useAppStore';
-import type { PerformanceMetrics } from '../../store/usePerformanceStore';
 
 /** 数字格式化: 千分位 */
 function fmt(n: number) {
@@ -122,7 +121,9 @@ function SectionTitle({ zh, en }: { zh: string; en: string }) {
 
 /**
  * 性能监控 — 悬浮按钮 + 弹出面板
- * 按钮置于光影面板上方; 指标由 Canvas 内的 PerformanceProbe 每 0.5s 上报
+ *
+ * 按钮由 Viewport 右下角堆叠列排布; 面板从按钮向上浮出 (与原来一致), 只是加宽并改为 3 列指标栅格。
+ * 面板贴右边缘对齐, 与左侧「视图设置/属性」列错开, 不再互相遮挡。
  */
 export function PerformanceMonitor() {
   const [open, setOpen] = useState(false);
@@ -135,9 +136,7 @@ export function PerformanceMonitor() {
   const modelName =
     (designerMode === 'outdoor' ? activeCampusItem?.name : activeModelItem?.name) ?? '默认场景';
   const tone = metrics ? fpsTone(metrics.fps) : null;
-  /** 指标水位判定 */
   const lv = (value: number, t: { warn: number; danger: number }): Level => levelOf(value, t.warn, t.danger);
-  /** 帧耗时配色: 正常保持灰色, 偏高橙, 超标红 */
   const frameLevel = metrics ? lv(metrics.frameTime, THRESHOLDS.frameTime) : 'normal';
   const frameTone =
     frameLevel === 'danger' ? 'text-red-500' : frameLevel === 'warn' ? 'text-orange-500' : 'text-gray-500';
@@ -168,12 +167,12 @@ export function PerformanceMonitor() {
 
       {/* 弹出面板 (向上浮出, 不挤压光影面板) */}
       {open && (
-        <div className="absolute bottom-full right-0 mb-2 w-72 bg-white/95 backdrop-blur-md rounded-lg shadow-xl border border-gray-200 overflow-hidden z-50">
+        <div className="absolute bottom-full right-0 mb-2 w-[26rem] max-w-[calc(100vw-2rem)] bg-white/95 backdrop-blur-md rounded-lg shadow-xl border border-gray-200 overflow-hidden z-50">
           {/* 标题栏 */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50/80">
+          <div className="flex items-center justify-between px-3.5 py-2 border-b border-gray-100 bg-gray-50/80">
             <div className="flex items-center gap-1.5 min-w-0">
-              <Activity size={12} className="text-emerald-500 shrink-0" />
-              <span className="text-[11px] font-semibold text-gray-700 whitespace-nowrap">性能监控</span>
+              <Activity size={13} className="text-emerald-500 shrink-0" />
+              <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">性能监控</span>
               <span className="text-[8px] text-gray-400 tracking-widest uppercase">Performance</span>
             </div>
             <button
@@ -185,7 +184,7 @@ export function PerformanceMonitor() {
             </button>
           </div>
 
-          <div className="px-3 py-2.5 space-y-2.5 max-h-[calc(100vh-16rem)] overflow-y-auto">
+          <div className="px-3.5 py-2.5 space-y-2.5 max-h-[calc(100vh-16rem)] overflow-y-auto">
             {/* 当前模型 */}
             <div className="flex items-center justify-between gap-2">
               <span className="text-[9px] text-gray-400 tracking-wider uppercase">当前模型</span>
@@ -221,7 +220,7 @@ export function PerformanceMonitor() {
             {/* 渲染 */}
             <div>
               <SectionTitle zh="渲染" en="Render" />
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 <Cell
                   label="Draw Calls"
                   value={metrics ? fmt(metrics.drawCalls) : '--'}
@@ -270,7 +269,7 @@ export function PerformanceMonitor() {
             {metrics && metrics.sceneStats.length > 0 && (
               <div>
                 <SectionTitle zh="模型构成" en="Model" />
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-3 gap-1.5">
                   {metrics.sceneStats.map((s) => (
                     <Cell key={s.label} label={s.label} value={s.value} />
                   ))}
@@ -281,7 +280,7 @@ export function PerformanceMonitor() {
             {/* 环境 */}
             <div>
               <SectionTitle zh="运行环境" en="Environment" />
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 <Cell
                   label="灯光"
                   value={metrics ? `${metrics.lights} (阴影 ${metrics.shadowLights})` : '--'}
@@ -304,18 +303,18 @@ export function PerformanceMonitor() {
                   value={metrics ? (metrics.jsHeapMB != null ? `${metrics.jsHeapMB.toFixed(1)} MB` : '不支持') : '--'}
                   level={metrics?.jsHeapMB != null ? lv(metrics.jsHeapMB, THRESHOLDS.jsHeap) : 'normal'}
                 />
-              </div>
-              <div className="mt-1.5 bg-gray-50 rounded-md px-2 py-1.5">
-                <div className="text-[9px] text-gray-400 leading-none mb-1">GPU</div>
-                <div className="text-[10px] font-mono text-gray-700 leading-tight truncate" title={metrics?.gpu}>
-                  {metrics?.gpu ?? '采样中...'}
+                <div className="col-span-2 bg-gray-50 rounded-md px-2 py-1.5 min-w-0">
+                  <div className="text-[9px] text-gray-400 leading-none mb-1">GPU</div>
+                  <div className="text-[11px] font-mono text-gray-700 leading-tight truncate" title={metrics?.gpu}>
+                    {metrics?.gpu ?? '采样中...'}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
           {/* 脚注 */}
-          <div className="px-3 py-1.5 border-t border-gray-100 text-[9px] text-gray-400 flex items-center justify-between">
+          <div className="px-3.5 py-1.5 border-t border-gray-100 text-[9px] text-gray-400 flex items-center justify-between">
             <span>每 0.5s 采样 · renderer.info</span>
             <span className="flex items-center gap-2">
               <span className="flex items-center gap-1">

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { HelpCircle, Download, Save, Check } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import { ExportPanel } from './ExportPanel';
 
 export function TopBar() {
   const currentUser = useAppStore((s) => s.currentUser);
@@ -14,6 +15,20 @@ export function TopBar() {
   // 保存反馈状态
   const [savedFlash, setSavedFlash] = useState(false);
   const hasActiveModel = !!activeModelId || !!activeCampusItem;
+
+  // 导出面板开关 (点击面板外部关闭)
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportWrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!exportOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (exportWrapRef.current && !exportWrapRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [exportOpen]);
 
   const handleSave = async () => {
     if (!hasActiveModel) return;
@@ -80,10 +95,21 @@ export function TopBar() {
           <HelpCircle size={14} />
           识别说明
         </button>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-gray-900 text-white hover:bg-gray-800 rounded-md transition-colors">
-          <Download size={14} />
-          导出模型
-        </button>
+        {/* 导出模型 (下拉面板: 名称 + GLB 格式) */}
+        <div className="relative" ref={exportWrapRef}>
+          <button
+            onClick={() => setExportOpen((v) => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md transition-colors ${
+              exportOpen
+                ? 'bg-gray-700 text-white'
+                : 'bg-gray-900 text-white hover:bg-gray-800'
+            }`}
+          >
+            <Download size={14} />
+            导出模型
+          </button>
+          {exportOpen && <ExportPanel onClose={() => setExportOpen(false)} />}
+        </div>
         {/* 保存按钮 */}
         <button
           onClick={handleSave}

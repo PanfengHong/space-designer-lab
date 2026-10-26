@@ -11,26 +11,29 @@ function isTypingTarget(t: EventTarget | null): boolean {
 }
 
 /**
- * 室内设计器快捷键
- * - Delete / Backspace : 删除选中的家具 / 建筑结构元素 (墙体 门窗)
- * - Esc                : 取消选中 (家具 + 建筑结构)
- * - R / Shift+R        : 选中家具顺时针 / 逆时针旋转 90°
+ * 设计器快捷键 (室内 / 户外共用, 按 designerMode 分流)
+ *
+ * 通用:
  * - Ctrl(Cmd)+Z        : 撤销   Ctrl(Cmd)+Shift+Z 或 Ctrl+Y : 重做
+ * - Delete / Backspace : 删除当前选中对象
+ * - Esc                : 取消选中
+ *
+ * 仅室内:
+ * - R / Shift+R        : 选中家具顺时针 / 逆时针旋转 90°
  * - Ctrl(Cmd)+D        : 复制选中家具
  *
  * 说明: Ctrl+S(保存) 由 TopBar 自己监听, 这里不重复处理。
  */
-export function useIndoorShortcuts() {
+export function useDesignerShortcuts() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const s = useAppStore.getState();
-      if (s.designerMode !== 'interior') return;
       if (isTypingTarget(e.target)) return;
 
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
 
-      // ---- 撤销 / 重做 ----
+      // ---- 撤销 / 重做 (两种模式通用, 栈内容由 store 按 designerMode 决定) ----
       if (mod && key === 'z') {
         e.preventDefault();
         if (e.shiftKey) s.redo();
@@ -42,8 +45,11 @@ export function useIndoorShortcuts() {
         s.redo();
         return;
       }
-      // ---- 复制 ----
-      if (mod && key === 'd') {
+
+      const outdoor = s.designerMode === 'outdoor';
+
+      // ---- 复制 (仅室内家具) ----
+      if (!outdoor && mod && key === 'd') {
         if (!s.selectedFurnitureId) return;
         e.preventDefault();
         s.duplicateFurniture(s.selectedFurnitureId);
@@ -52,8 +58,22 @@ export function useIndoorShortcuts() {
       // 其余带修饰键的组合交给浏览器/系统
       if (mod || e.altKey) return;
 
-      // ---- 删除 (家具优先, 其次建筑结构元素) ----
+      // ---- 删除 ----
       if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (outdoor) {
+          if (s.selectedGroundId) {
+            e.preventDefault();
+            s.removeGroundItem(s.selectedGroundId);
+            return;
+          }
+          if (s.selectedOutdoorObjectId) {
+            e.preventDefault();
+            s.removeOutdoorObject(s.selectedOutdoorObjectId);
+            return;
+          }
+          return;
+        }
+        // 室内: 家具优先, 其次建筑结构元素
         if (s.selectedFurnitureId) {
           e.preventDefault();
           s.removeFurniture(s.selectedFurnitureId);
@@ -69,13 +89,18 @@ export function useIndoorShortcuts() {
 
       // ---- 取消选中 ----
       if (e.key === 'Escape') {
-        s.selectFurniture(null);
-        s.selectStructure(null);
+        if (outdoor) {
+          s.selectGround(null);
+          s.selectOutdoorObject(null);
+        } else {
+          s.selectFurniture(null);
+          s.selectStructure(null);
+        }
         return;
       }
 
-      // ---- 旋转 90° ----
-      if (key === 'r') {
+      // ---- 旋转 90° (仅室内家具) ----
+      if (!outdoor && key === 'r') {
         const id = s.selectedFurnitureId;
         if (!id) return;
         const f = findFurniture(s.sceneData, id);
