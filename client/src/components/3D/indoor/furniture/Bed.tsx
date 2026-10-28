@@ -14,7 +14,7 @@ interface Props {
 
 /**
  * 床 — 由床架 + 床垫 + 床头板(带弧形造型) + 床脚 + 被褥组成
- * 局部坐标系: x=床宽(左右), y=向上, z=床长(床头在 -z, 床尾在 +z)
+ * 局部坐标系 (与 collision.ts/2D 平面图同口径): x=床长 size[2] (床头在 -x, 床尾在 +x), y=向上, z=床宽 size[0]
  */
 export function Bed({ data }: Props) {
   const p = useStylePalette();
@@ -66,15 +66,15 @@ export function Bed({ data }: Props) {
     return geo;
   }, [headShape, headT]);
 
-  // 床脚
+  // 床脚 — 落在床架四角内侧 (床架 x 范围 ±d/2, z 范围 ±w/2)
   const legH = 0.15;
   const legSize = 0.06;
   const legY = legH / 2;
   const legPositions: [number, number, number][] = [
-    [-w / 2 + legSize, legY, -d / 2 + legSize],
-    [w / 2 - legSize, legY, -d / 2 + legSize],
-    [-w / 2 + legSize, legY, d / 2 - legSize],
-    [w / 2 - legSize, legY, d / 2 - legSize],
+    [-d / 2 + legSize, legY, -w / 2 + legSize],
+    [d / 2 - legSize, legY, -w / 2 + legSize],
+    [-d / 2 + legSize, legY, w / 2 - legSize],
+    [d / 2 - legSize, legY, w / 2 - legSize],
   ];
 
   return (
@@ -94,25 +94,26 @@ export function Bed({ data }: Props) {
         <meshStandardMaterial color={mattressColor} roughness={0.9} />
       </mesh>
 
-      {/* 被褥 (覆盖床垫上半部分, 床尾翻折) */}
-      <mesh position={[0, h + 0.2, 0.1]} castShadow receiveShadow>
+      {/* 被褥 (覆盖床垫上半部分, 床尾翻折, 朝 +x 床尾偏移) */}
+      <mesh position={[0.1, h + 0.2, 0]} castShadow receiveShadow>
         <boxGeometry args={[d - 0.05, 0.06, w - 0.15]} />
         <meshStandardMaterial color={sheetColor} roughness={0.92} />
       </mesh>
 
-      {/* 枕头 (左右两个) — 长方形圆角, 长边沿 x 平行于床头板 */}
-      <mesh position={[-d / 4, h + 0.22, -w / 2 + 0.25]} castShadow>
-        <roundedBoxGeometry args={[0.6, 0.14, 0.4, 4, 0.06]} />
+      {/* 枕头 (左右两个) — 长边沿 z (床宽方向), 靠床头 (-x 端) */}
+      <mesh position={[-d / 2 + 0.35, h + 0.22, -w / 4]} castShadow>
+        <roundedBoxGeometry args={[0.4, 0.14, 0.6, 4, 0.06]} />
         <meshStandardMaterial color={pillowColor} roughness={0.95} />
       </mesh>
-      <mesh position={[d / 4, h + 0.22, -w / 2 + 0.25]} castShadow>
-        <roundedBoxGeometry args={[0.6, 0.14, 0.4, 4, 0.06]} />
+      <mesh position={[-d / 2 + 0.35, h + 0.22, w / 4]} castShadow>
+        <roundedBoxGeometry args={[0.4, 0.14, 0.6, 4, 0.06]} />
         <meshStandardMaterial color={pillowColor} roughness={0.95} />
       </mesh>
 
-      {/* 床头板 (带弧形造型, 立在床的 -z 端外侧) */}
+      {/* 床头板 (带弧形造型, 立在床的 -x 端外侧; 几何在 xy 平面拉伸, 旋转 90° 让宽度沿 z) */}
       <mesh
-        position={[0, legH, -w / 2 - headT / 2]}
+        position={[-d / 2 - headT / 2, legH, 0]}
+        rotation={[0, Math.PI / 2, 0]}
         geometry={headGeometry}
         castShadow
         receiveShadow
@@ -120,8 +121,8 @@ export function Bed({ data }: Props) {
         <meshStandardMaterial color={headboardColor} roughness={0.7} />
       </mesh>
 
-      {/* 床头板描边 — 与实体 mesh 相同 position, 避免错位 */}
-      <lineSegments position={[0, legH, -w / 2 - headT / 2]}>
+      {/* 床头板描边 — 与实体 mesh 相同 position/rotation, 避免错位 */}
+      <lineSegments position={[-d / 2 - headT / 2, legH, 0]} rotation={[0, Math.PI / 2, 0]}>
         <edgesGeometry args={[headGeometry]} />
         <lineBasicMaterial color={p.accent} />
       </lineSegments>

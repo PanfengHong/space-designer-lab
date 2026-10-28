@@ -266,7 +266,7 @@ export const mockSceneData: SceneData = {
         { id: 'bw-ba1', position: [1.75, 0.9, -0.1], width: 2.4, depth: 0.6, height: 1.6, rotation: 180 },
       ],
       furniture: [
-        { id: 'f-ba1', name: '双人床', position: [1.05, 0, 1.9], rotation: 90, size: [1.8, 0.45, 2.0], type: 'bed', color: '#e8e0d4' },
+        { id: 'f-ba1', name: '双人床', position: [1.2, 0, 1.9], rotation: 0, size: [1.8, 0.45, 2.0], type: 'bed', color: '#e8e0d4' },
         { id: 'f-ba2', name: '衣柜', position: [1.15, 0, 3.9], rotation: 90, size: [2.0, 2.45, 0.5], type: 'cabinet', color: '#d4c5b0' },
         { id: 'f-ba4', name: '床头柜', position: [0.35, 0, 0.6], rotation: 0, size: [0.5, 0.5, 0.45], type: 'cabinet', color: '#8b7355' },
       ],
@@ -322,7 +322,7 @@ export const mockSceneData: SceneData = {
         { id: 'bw-bc1', position: [1.5, 0.9, 10.7], width: 2.8, depth: 0.6, height: 1.6, rotation: 0 },
       ],
       furniture: [
-        { id: 'f-bc1', name: '双人床', position: [0.05, 0, 8.75], rotation: 90, size: [1.8, 0.45, 2.0], type: 'bed', color: '#d4c5b0' },
+        { id: 'f-bc1', name: '双人床', position: [0.20, 0, 8.7], rotation: 0, size: [1.8, 0.45, 2.0], type: 'bed', color: '#d4c5b0' },
         { id: 'f-bc2', name: '衣柜', position: [0.25, 0, 6.7], rotation: -90, size: [2.2, 2.45, 0.7], type: 'cabinet', color: '#8b7355' },
         { id: 'f-bc3', name: '床头柜', position: [-0.65, 0, 7.5], rotation: 0, size: [0.5, 0.5, 0.45], type: 'cabinet', color: '#5c4033' },
         { id: 'f-bc4', name: '床头柜', position: [-0.65, 0, 10.0], rotation: 0, size: [0.5, 0.5, 0.45], type: 'cabinet', color: '#5c4033' },
@@ -503,7 +503,7 @@ export const mockSceneData: SceneData = {
         { id: 'bw-bb1', position: [8.95, 0.9, 10.7], width: 2.0, depth: 0.6, height: 1.6, rotation: 0 },
       ],
       furniture: [
-        { id: 'f-bb5', name: '双人床', position: [9.4, 0, 8.5], rotation: 270, size: [1.8, 0.45, 2.0], type: 'bed', color: '#e8e0d4' },
+        { id: 'f-bb5', name: '双人床', position: [9.3, 0, 8.5], rotation: 180, size: [1.8, 0.45, 2.0], type: 'bed', color: '#e8e0d4' },
         { id: 'f-bb6', name: '衣柜', position: [9.35, 0, 6.9], rotation: -90, size: [2.0, 2.45, 0.5], type: 'cabinet', color: '#d4c5b0' },
         { id: 'f-bb7', name: '床头柜', position: [10.05, 0, 9.8], rotation: 180, size: [0.5, 0.5, 0.45], type: 'cabinet', color: '#8b7355' },
         { id: 'f-bb4', name: '书桌', position: [7.45, 0, 9.5], rotation: 90, size: [0.6, 0.75, 1.2], type: 'table', color: '#a0826d' },
