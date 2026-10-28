@@ -6,6 +6,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { screenToFloor, snapToGrid } from '../../../utils/r3fBridge';
 import { PerformanceProbe } from './PerformanceProbe';
 import { exportBridge, EXPORT_CONTENT_GROUP } from '../../../utils/exportBridge';
+import type { RenderMode } from '../../../types';
 import type {
   BaseSceneProps,
   ViewMode,
@@ -14,6 +15,125 @@ import type {
   GridConfig,
   WalkPoint,
 } from './types';
+
+/* ==================== 渲染模式 (ARCTIC 素模 / SHADED 着色 / MATERIAL 材质) ==================== */
+
+/** 素模粘土材质色 (微暖白, 比纯白更有石膏感) */
+const CLAY_COLOR = '#f2f1ee';
+
+/** 被替换前的原始材质状态 (切换模式后可完整还原) */
+interface OriginalMaterialState {
+  material: THREE.Material | THREE.Material[];
+  metalness: number;
+  envMapIntensity: number;
+}
+
+/**
+ * 渲染模式控制器 — 直写 three 对象, 不经 React state (高频/大遍历约定)。
+ *
+ * 只处理 DesignerContent 组内的 PBR 材质 (Standard/Physical) 且不透明、depthTest 正常的网格;
+ * 导航光柱、选中高亮、文字标签等透明或 Basic 类 UI 对象不受影响, 保证交互可读性。
+ * useFrame 每 0.5s 增量扫描一次, 新放入的家具也会立即进入当前模式。
+ */
+function RenderModeController() {
+  const renderMode = useAppStore((s) => s.renderMode);
+  const scene = useThree((s) => s.scene);
+
+  const originalRef = useRef<WeakMap<THREE.Mesh, OriginalMaterialState>>(new WeakMap());
+  const modeRef = useRef<RenderMode>(renderMode);
+  modeRef.current = renderMode;
+  const scanAccRef = useRef(0);
+  const clayRef = useMemo(
+    () => new THREE.MeshStandardMaterial({ color: CLAY_COLOR, roughness: 0.95, metalness: 0 }),
+    [],
+  );
+  useEffect(() => () => clayRef.dispose(), [clayRef]);
+
+  const getRoot = () => scene.getObjectByName(EXPORT_CONTENT_GROUP) ?? null;
+
+  /** 还原所有被改动的材质为原始状态 (含 shaded 模式直接写在原材质上的属性) */
+  const restoreAll = () => {
+    const root = getRoot();
+    if (!root) return;
+    const store = originalRef.current;
+    root.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!(mesh as any).isMesh) return;
+      const orig = store.get(mesh);
+      if (!orig) return;
+      mesh.material = orig.material;
+      const mat = orig.material as any;
+      if (!Array.isArray(orig.material) && (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial)) {
+        mat.metalness = orig.metalness;
+        mat.envMapIntensity = orig.envMapIntensity;
+      }
+      store.delete(mesh);
+    });
+  };
+
+  /**
+   * 把当前模式应用到组内所有网格 (幂等, 可周期重复调用)。
+   * - arctic: 换成共享粘土材质
+   * - shaded: 保留固有色, 金属度归零 + 环境反射压到 0.25 (哑光)
+   * - material: 不做任何事
+   */
+  const applyMode = (mode: RenderMode) => {
+    const root = getRoot();
+    if (!root) return;
+    const store = originalRef.current;
+    root.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!(mesh as any).isMesh) return;
+      const mat = mesh.material as any;
+      if (!mat || Array.isArray(mesh.material)) return;
+      if (!(mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial)) return;
+      if (mat === clayRef || mat.transparent || mat.depthTest === false) return;
+
+      if (mode === 'material') return;
+
+      if (!store.has(mesh)) {
+        store.set(mesh, {
+          material: mesh.material as THREE.Material,
+          metalness: mat.metalness ?? 0,
+          envMapIntensity: mat.envMapIntensity ?? 1,
+        });
+      }
+      if (mode === 'arctic') {
+        mesh.material = clayRef;
+      } else {
+        mat.metalness = 0;
+        mat.envMapIntensity = 0.25;
+      }
+    });
+  };
+
+  // 模式切换: 先整体还原, 再应用新模式 (避免 shaded 的金属度修改叠加到原始值上)
+  useEffect(() => {
+    restoreAll();
+    if (renderMode !== 'material') applyMode(renderMode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderMode, scene]);
+
+  // 增量扫描: 拖入新家具 / 撤销重做后出现的网格, 补上当前模式
+  useFrame((_, delta) => {
+    if (modeRef.current === 'material') return;
+    scanAccRef.current += delta;
+    if (scanAccRef.current < 0.5) return;
+    scanAccRef.current = 0;
+    applyMode(modeRef.current);
+  });
+
+  // 卸载时还原, 防止被改动的材质状态泄漏到下一次挂载
+  useEffect(
+    () => () => {
+      restoreAll();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  return null;
+}
 
 /* ==================== 浏览器手势拦截 ==================== */
 
@@ -29,6 +149,24 @@ function ExportSceneReporter() {
       exportBridge.content = null;
     };
   }, [scene]);
+  return null;
+}
+
+/**
+ * 关掉线段的拾取容差。
+ *
+ * three 的 Raycaster 对 Line/LineSegments 默认带 1 米的命中阈值 (params.Line.threshold):
+ * 命中判定是"射线到线段的最近距离 < 阈值", 而不是真实相交。素材组件里的装饰性
+ * 描边 (水箱描边、柜体描边、线框) 全都参与事件射线 —— 于是目标周围 1 米内的任何
+ * 描边都会产生"不在射线上"的伪命中, 还会按伪命中点的位置参与距离排序, 抢走本该
+ * 属于目标的点击 (典型翻车: 顶视图点马桶, 选中旁边洗手台的描边)。
+ * 阈值压到 1cm: 真正点到线上才命中, 伪命中消失。
+ */
+function DisableLinePicking() {
+  const raycaster = useThree((s) => s.raycaster);
+  useEffect(() => {
+    if (raycaster.params.Line) raycaster.params.Line.threshold = 0.01;
+  }, [raycaster]);
   return null;
 }
 
@@ -163,8 +301,21 @@ function EngineScaleReporter({ center }: { center: [number, number, number] }) {
 }
 
 /* ==================== 光照 ==================== */
+/**
+ * 光源池上限 = 所有光影配置中 pointLights 的最大数量。
+ * 固定光源数量是切换光影不卡顿的关键: three.js 按 NUM_POINT_LIGHTS 等宏编译材质着色器,
+ * 光源挂载/卸载会触发全场景材质重编译 (数百 ms 主线程冻结)。
+ * 池内未用到的光源只把 intensity 置 0, 数量恒定 → 零重编译。
+ */
+const LIGHT_POOL_SIZE = 4;
+
 function EngineLighting({ mode, configs }: { mode: string; configs: Record<string, LightingModeConfig> }) {
   const dirRef = useRef<THREE.DirectionalLight>(null);
+  const dir2Ref = useRef<THREE.DirectionalLight>(null);
+  const ambientRef = useRef<THREE.AmbientLight>(null);
+  const hemiRef = useRef<THREE.HemisphereLight>(null);
+  const pointRefs = useRef<(THREE.PointLight | null)[]>([]);
+  const scene = useThree((s) => s.scene);
   const config = configs[mode] ?? configs[Object.keys(configs)[0]];
   const range = config?.shadowCameraRange ?? 15;
 
@@ -186,33 +337,86 @@ function EngineLighting({ mode, configs }: { mode: string; configs: Record<strin
     light.shadow.needsUpdate = true;
   }, [range, mode]);
 
+  /* 光影切换: 命令式直写光对象属性 (不经 React 重挂载)。
+     光源数量与雾的挂载状态恒定, 材质着色器不会重编译, 切换零卡顿。 */
+  useLayoutEffect(() => {
+    if (!config) return;
+
+    const amb = ambientRef.current;
+    if (amb) {
+      amb.intensity = config.ambient;
+      amb.color.set(config.ambientColor);
+    }
+    const hemi = hemiRef.current;
+    if (hemi) {
+      hemi.intensity = config.hemiIntensity;
+      hemi.color.set(config.hemiSky);
+      hemi.groundColor.set(config.hemiGround);
+    }
+    const dir = dirRef.current;
+    if (dir) {
+      dir.intensity = config.dirIntensity;
+      dir.color.set(config.dirColor);
+      dir.position.set(...config.dirPos);
+    }
+    const dir2 = dir2Ref.current;
+    if (dir2) {
+      dir2.intensity = config.dir2Intensity;
+      dir2.color.set(config.dir2Color ?? config.dirColor);
+      dir2.position.set(...(config.dir2Pos ?? [-5, 10, -5]));
+    }
+    config.pointLights.forEach((pl, i) => {
+      const l = pointRefs.current[i];
+      if (!l) return;
+      l.position.set(...pl.pos);
+      l.color.set(pl.color);
+      l.intensity = pl.intensity;
+      l.distance = pl.dist;
+    });
+    // 池内多余的点光: 只熄灭, 不卸载
+    for (let i = config.pointLights.length; i < LIGHT_POOL_SIZE; i++) {
+      const l = pointRefs.current[i];
+      if (l) l.intensity = 0;
+    }
+
+    // 雾: 常驻挂载, 无雾模式把 near/far 推到极远处 (雾因子≈0, 视觉等价于无雾),
+    // 避免 USE_FOG 宏开关引发的全量材质重编译
+    const fog = scene.fog as THREE.Fog | null;
+    if (fog) {
+      if (config.fog) {
+        fog.color.set(config.fog[1]);
+        fog.near = config.fog[0];
+        fog.far = config.fog[0] + 15;
+      } else {
+        fog.near = 1e6;
+        fog.far = 1e6 + 10;
+      }
+    }
+  }, [config, scene]);
+
   if (!config) return null;
 
   return (
     <>
-      {config.fog && <fog attach="fog" args={[config.fog[1], config.fog[0], config.fog[0] + 15]} />}
-      <ambientLight intensity={config.ambient} color={config.ambientColor} />
+      <fog attach="fog" args={['#000000', 1e6, 1e6 + 10]} />
+      <ambientLight ref={ambientRef} />
       <directionalLight
         ref={dirRef}
         position={config.dirPos}
-        intensity={config.dirIntensity}
-        color={config.dirColor}
-        castShadow={config.castShadow ?? true}
+        castShadow
         shadow-mapSize-width={config.shadowMapSize ?? 2048}
         shadow-mapSize-height={config.shadowMapSize ?? 2048}
         shadow-bias={-0.0005}
         shadow-normalBias={0.02}
       />
-      {config.dir2Intensity > 0 && (
-        <directionalLight
-          position={config.dir2Pos ?? [-5, 10, -5]}
-          intensity={config.dir2Intensity}
-          color={config.dir2Color ?? config.dirColor}
+      <directionalLight ref={dir2Ref} />
+      <hemisphereLight ref={hemiRef} />
+      {Array.from({ length: LIGHT_POOL_SIZE }, (_, i) => (
+        <pointLight
+          key={i}
+          ref={(el) => { pointRefs.current[i] = el; }}
+          decay={2}
         />
-      )}
-      <hemisphereLight args={[config.hemiSky, config.hemiGround, config.hemiIntensity]} />
-      {config.pointLights.map((pl, i) => (
-        <pointLight key={i} position={pl.pos} color={pl.color} intensity={pl.intensity} distance={pl.dist} decay={2} />
       ))}
     </>
   );
@@ -460,6 +664,7 @@ export function BaseScene(props: BaseSceneProps) {
     >
       <Suspense fallback={null}>
         <DisableBrowserGestures />
+        <DisableLinePicking />
         {/* PCSS 软阴影: 阴影边缘随距离柔和扩散, 去除硬边截图感 */}
         {softShadow !== false && (
           <SoftShadows
@@ -497,6 +702,7 @@ export function BaseScene(props: BaseSceneProps) {
         <EngineLighting mode={lighting} configs={lightingConfigs} />
         <StudioEnvironment />
         <ExportSceneReporter />
+        <RenderModeController />
 
         {grid && (
           <Grid

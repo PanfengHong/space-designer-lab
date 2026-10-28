@@ -62,12 +62,15 @@ interface SceneContentProps {
 }
 
 /**
- * 空间聚焦动画 — 选中空间时, 相机平滑移动到该房间中心上方
+ * 相机聚焦动画 — 两个来源:
+ *   1. 选中空间 (点空间名): 相机平滑移动到该房间中心上方;
+ *   2. 空间目录里点具体元素 (墙/门/窗/家具): 相机飞到该元素上方 (cameraFocus, 带 nonce)。
  * 基础视图切换/重置由 BaseScene 的 EngineCameraController 负责
  */
 function SpaceFocusController({ viewMode, activeSpaceId }: { viewMode: string; activeSpaceId: string | null }) {
   const { camera, controls } = useThree() as { camera: THREE.Camera; controls: any };
   const sceneRooms = useAppStore((s) => s.sceneData.rooms);
+  const cameraFocus = useAppStore((s) => s.cameraFocus);
 
   const focusTarget = useMemo<{ pos: [number, number, number]; tgt: [number, number, number] } | null>(() => {
     if (!activeSpaceId) return null;
@@ -85,6 +88,30 @@ function SpaceFocusController({ viewMode, activeSpaceId }: { viewMode: string; a
     }
   }, [activeSpaceId, viewMode, sceneRooms]);
 
+  // 已消费的请求 nonce: 挂载前就存在的请求视为已消费; 消费后即使重算 (切视图模式) 也不重放
+  const consumedRef = useRef(cameraFocus?.nonce ?? 0);
+
+  /**
+   * 元素聚焦: 视距比房间聚焦近一档 —— 点的是单件家具/一段墙, 拉到房间高度就看不清了。
+   * plan 模式 3D 画布整体卸载, 这里返回 null 不消费。
+   */
+  const elementTarget = useMemo<{ pos: [number, number, number]; tgt: [number, number, number] } | null>(() => {
+    if (!cameraFocus || cameraFocus.nonce === consumedRef.current) return null;
+    const { x, z } = cameraFocus;
+    switch (viewMode) {
+      case 'plan':
+        return null;
+      case 'top':
+        return { pos: [x, 12, z], tgt: [x, 0, z] };
+      case 'axonometric':
+        return { pos: [x + 4, 6.5, z + 4], tgt: [x, 0.4, z] };
+      case 'walkthrough':
+        return { pos: [x, 1.6, z], tgt: [x, 1.2, z] };
+      default:
+        return { pos: [x + 3.2, 4.5, z + 3.2], tgt: [x, 0.5, z] };
+    }
+  }, [cameraFocus, viewMode]);
+
   const posRef = useRef(new THREE.Vector3());
   const lookRef = useRef(new THREE.Vector3());
   const focusingRef = useRef(false);
@@ -95,6 +122,14 @@ function SpaceFocusController({ viewMode, activeSpaceId }: { viewMode: string; a
     lookRef.current.set(...focusTarget.tgt);
     focusingRef.current = true;
   }, [focusTarget]);
+
+  useEffect(() => {
+    if (!elementTarget || !cameraFocus) return;
+    consumedRef.current = cameraFocus.nonce;
+    posRef.current.set(...elementTarget.pos);
+    lookRef.current.set(...elementTarget.tgt);
+    focusingRef.current = true;
+  }, [elementTarget, cameraFocus]);
 
   useFrame(() => {
     if (viewMode === 'walkthrough') return;
@@ -388,7 +423,7 @@ function SceneContent({
           {/* 室内设计层 — 锁定时不可选中 */}
           {/* @ts-ignore pointerEvents 是 R3F 运行时支持的属性 */}
           <group pointerEvents={interiorLocked ? 'none' : 'auto'}>
-            <FurnitureGroup items={room.furniture} />
+            <FurnitureGroup items={room.furniture} roomId={room.id} />
           </group>
           {showSpaceName && (
             <Text

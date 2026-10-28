@@ -141,13 +141,21 @@ function insideBounds(corners: [number, number][], bs: RectBound[]): boolean {
 
 /* ==================== 室内: 家具 / 墙体 ==================== */
 
+/**
+ * 用 size[0] 作为局部 X 轴建模的素材 —— 与项目约定 (X = size[2], Z = size[0]) 相反。
+ * Toilet: tankW = w*0.85 直接作为 boxGeometry 的 X; Chair: args=[w, seatT, d]。
+ * 占位盒必须跟随各自的建模轴向, 否则贴墙摆放时会凭空"多占"十几厘米。
+ */
+const X_IS_SIZE0 = new Set<string>(['toilet', 'chair']);
+
 /** 家具占位盒 — 与 Furniture.tsx 的选中高亮盒完全一致 (含淋浴间特殊偏移) */
 export function furnitureObb(f: FurnitureLike, x?: number, z?: number): Obb2 {
   const px = x ?? 0;
   const pz = z ?? 0;
   const rot = f.rotation ?? 0;
-  let hx = f.size[2] / 2;
-  let hz = f.size[0] / 2;
+  const swap = X_IS_SIZE0.has(f.type);
+  let hx = (swap ? f.size[0] : f.size[2]) / 2;
+  let hz = (swap ? f.size[2] : f.size[0]) / 2;
   let ox = 0;
   let oz = 0;
   if (f.type === 'shower') {

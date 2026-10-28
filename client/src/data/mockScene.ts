@@ -293,7 +293,7 @@ export const mockSceneData: SceneData = {
         // 淋浴间: 左上角, 贴北墙(z=4.3)+西墙(x=-1.0), 四分之一圆, 半径1.2m
         { id: 'f-bb3', name: '淋浴间', position: [-0.9, 0, 4.4], rotation: 0, size: [1.2, 2.0, 0], type: 'shower', shape: 'quarter', color: '#a8d0e6' },
         // 马桶: 左下角, 贴西墙(x=-1.0)+南墙(z=6.2), 正面朝北 (rotation 180)
-        { id: 'f-bb1', name: '马桶', position: [0.55, 0, 5.775], rotation: 90, size: [0.4, 0.8, 0.65], type: 'toilet', color: '#fafafa' },
+        { id: 'f-bb1', name: '马桶', position: [-0.35, 0, 5.775], rotation: 90, size: [0.4, 0.8, 0.65], type: 'toilet', color: '#fafafa' },
         // 洗手台: 右上角, 贴北墙(z=4.3)+东墙(x=1.7)
         { id: 'f-bb2', name: '洗手台', position: [1.15, 0, 4.7], rotation: 90, size: [0.7, 0.85, 0.5], type: 'sink', color: '#ffffff' },
       ],

@@ -82,22 +82,65 @@ export function FloorPlan2D() {
     setZoom((z) => Math.max(0.3, Math.min(8, z * delta)));
   }, []);
 
+  /**
+   * 屏幕坐标 → 世界坐标 → 命中的家具 (自上而下)。
+   * 遍历顺序 = 绘制顺序的倒序: 内嵌件 (后画, 在最上层) 优先, 其次普通件;
+   * 第一件命中的即选中目标, 保证"点哪选哪"。
+   * 挂墙高位内嵌件 (如电视 y=1.1) 在俯视图里不占可操作平面, 不参与命中,
+   * 点击穿透到下方的电视柜等家具 (仍可通过空间目录选中)。
+   */
+  const pickFurnitureAt = useCallback((clientX: number, clientY: number): Furniture | null => {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const p = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+    const all = useAppStore.getState().sceneData.rooms.flatMap((r) => r.furniture);
+    // 低位内嵌件 (灶台/水槽, 占台面) 优先命中; 挂墙高位内嵌件 (电视 y≥1) 不参与命中
+    const embedded = all.filter((f) => f.embedded && f.position[1] < 1);
+    const normal = all.filter((f) => !f.embedded);
+    for (const f of embedded) if (furnitureHitTest(f, p.x, p.y)) return f;
+    for (let i = normal.length - 1; i >= 0; i--) {
+      if (furnitureHitTest(normal[i], p.x, p.y)) return normal[i];
+    }
+    return null;
+  }, []);
+
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    // 室内层锁定 = 家具不可选中, 一律当作空白处理
+    const locked = useAppStore.getState().layers.find((l) => l.id === 'interior')?.locked ?? false;
+    const hit = locked ? null : pickFurnitureAt(e.clientX, e.clientY);
+    if (hit) {
+      useAppStore.getState().selectFurniture(hit.id);
+      return; // 命中家具: 选中, 不进入画布平移
+    }
+    // 点在空白处 → 清除选中, 与 3D 视口行为一致
+    useAppStore.getState().selectFurniture(null);
     isPanning.current = true;
     panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
     (e.target as Element).setPointerCapture(e.pointerId);
-  }, [pan.x, pan.y]);
+  }, [pan.x, pan.y, pickFurnitureAt]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!isPanning.current) return;
-    const dx = e.clientX - panStart.current.x;
-    const dy = e.clientY - panStart.current.y;
-    setPan({ x: panStart.current.panX + dx, y: panStart.current.panY + dy });
-  }, []);
+    if (isPanning.current) {
+      const dx = e.clientX - panStart.current.x;
+      const dy = e.clientY - panStart.current.y;
+      setPan({ x: panStart.current.panX + dx, y: panStart.current.panY + dy });
+      return;
+    }
+    // 悬停高亮光标: 家具上 pointer, 其余 grab
+    const locked = useAppStore.getState().layers.find((l) => l.id === 'interior')?.locked ?? false;
+    const over = !locked && pickFurnitureAt(e.clientX, e.clientY);
+    const cursor = over ? 'pointer' : 'grab';
+    if (containerRef.current && containerRef.current.style.cursor !== cursor) {
+      containerRef.current.style.cursor = cursor;
+    }
+  }, [pickFurnitureAt]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     isPanning.current = false;
+    if (containerRef.current) containerRef.current.style.cursor = 'grab';
     try { (e.target as Element).releasePointerCapture(e.pointerId); } catch {}
   }, []);
 
@@ -209,10 +252,19 @@ export function FloorPlan2D() {
           ))
         )}
 
-        {/* 家具 */}
+        {/* 家具
+            分两遍渲染: 普通家具 → 内嵌件 (灶台/水槽等嵌在橱柜里的) 后画。
+            内嵌件占地被橱柜完全覆盖, 同层渲染时后出现的橱柜命中区 (西橱柜等)
+            会把它压住 (SVG 后者在上), 导致点灶台选中橱柜。
+            内嵌件放到最上层后, 小面积的灶台/水槽优先吃到点击。 */}
         {rooms.map((room) =>
-          room.furniture.map((f) => (
-            <Furniture2D key={f.id} furniture={f} />
+          room.furniture.filter((f) => !f.embedded).map((f) => (
+            <Furniture2DInteractive key={f.id} furniture={f} />
+          ))
+        )}
+        {rooms.map((room) =>
+          room.furniture.filter((f) => f.embedded).map((f) => (
+            <Furniture2DInteractive key={f.id} furniture={f} />
           ))
         )}
 
@@ -718,6 +770,70 @@ function FrenchWindow2D({ frenchWindow, wallThickness: wt }: { frenchWindow: imp
   return <line x1={x - w / 2} y1={z} x2={x + w / 2} y2={z} stroke={C.window} strokeWidth={0.12} />;
 }
 
+/**
+ * 平面图家具的交互包装 — 选中描边。
+ *
+ * 命中判定不再依赖逐件铺开的大透明矩形: 相邻大件 (橱柜等) 的命中区会互相
+ * 遮挡, 出现"点东橱柜选中冰箱/淋浴"的错位。现在统一由 FloorPlan2D 根节点
+ * 的 pointerDown 做几何命中测试 (furnitureHitTest), 本组件只负责:
+ *   - 选中态绿色描边 (尺寸与占地同口径)
+ *   - 内嵌件 (灶台/水槽) 的描边渲染顺序 (内嵌件后画, 在最上层)
+ */
+function Furniture2DInteractive({ furniture }: { furniture: Furniture }) {
+  const selected = useAppStore((s) => s.selectedFurnitureId === furniture.id);
+
+  const [x, , z] = furniture.position;
+  // 描边尺寸 = 占地 (与 furnitureHitTest 同口径); 淋浴间图形从锚点展开, 按 size[0] 作边长
+  const isShower = furniture.type === 'shower';
+  const hitW = isShower ? furniture.size[0] : furniture.size[2];
+  const hitH = isShower ? furniture.size[0] : furniture.size[0];
+  const hitX = isShower ? x : x - hitW / 2;
+  const hitY = isShower ? z : z - hitH / 2;
+
+  return (
+    <g>
+      <Furniture2D furniture={furniture} />
+      {selected && (
+        <rect
+          x={hitX - 0.05} y={hitY - 0.05}
+          width={hitW + 0.1} height={hitH + 0.1}
+          transform={`rotate(${furniture.rotation}, ${x}, ${z})`}
+          fill="none"
+          stroke="#22c55e"
+          strokeWidth={0.045}
+          rx={0.05}
+          pointerEvents="none"
+        />
+      )}
+    </g>
+  );
+}
+
+/**
+ * 几何命中测试: 世界坐标点是否落在家具占地内 (考虑旋转)。
+ * 矩形占地以 (x, z) 为中心、宽=size[2] (SVG x 向)、深=size[0] (SVG z 向),
+ * 旋转后仍是中心对称矩形, 逆旋转到局部坐标再判边界即可。
+ * 淋浴间是锚点展开图形, 保持旧行为: 以 (x, z) 为左上角、边长 size[0]。
+ */
+function furnitureHitTest(f: Furniture, px: number, pz: number, pad = 0.03): boolean {
+  const [x, , z] = f.position;
+  const isShower = f.type === 'shower';
+  const w = isShower ? f.size[0] : f.size[2];
+  const h = isShower ? f.size[0] : f.size[0];
+
+  if (isShower) {
+    return px >= x - pad && px <= x + w + pad && pz >= z - pad && pz <= z + h + pad;
+  }
+
+  const rot = ((f.rotation % 360) + 360) % 360;
+  const rad = (rot * Math.PI) / 180;
+  const dx = px - x, dz = pz - z;
+  // 逆旋转到家具局部坐标 (SVG 顺时针旋转的正变换是 [cos, -sin; sin, cos])
+  const lx = dx * Math.cos(rad) + dz * Math.sin(rad);
+  const lz = -dx * Math.sin(rad) + dz * Math.cos(rad);
+  return Math.abs(lx) <= w / 2 + pad && Math.abs(lz) <= h / 2 + pad;
+}
+
 /** 家具 — 极简灰阶图形, 无文字标注 */
 function Furniture2D({ furniture }: { furniture: Furniture }) {
   if (furniture.type === 'shower') return <Shower2D furniture={furniture} />;
@@ -730,25 +846,46 @@ function Furniture2D({ furniture }: { furniture: Furniture }) {
   const localW = d;
   const localH = w;
 
-  // 灶台: 深色台面 + 2 个炉头圆圈
+  // 灶台: 深色台面 + 2 个炉头圆圈 + 2 个前端旋钮
+  // 与 3D Stove.tsx 对齐: 炉头沿局部 Z 轴排列 (间距 ±0.28*size[0] = ±0.28*localH),
+  // 旋钮在 +X 前端边缘 (距边 0.04, z=±0.2*size[0])。
+  // 注意 rotate(-rot): three.js 绕 Y 轴旋转俯视是逆时针, SVG rotate 顺视是顺时针,
+  // 两者反向 —— 台面/炉头是 ± 对称的看不出来, 但旋钮在 +X 单边, 方向反了会贴到墙上。
   if (furniture.type === 'stove') {
     const burnerR = Math.min(localW, localH) * 0.2;
     const burnerOffsets: [number, number][] = [
-      [-localW * 0.28, 0],
-      [localW * 0.28, 0],
+      [0, -localH * 0.28],
+      [0, localH * 0.28],
     ];
+    // 3D 灶面是黑色玻璃, 平面图压到比橱柜台面深一档, 否则嵌在橱柜里完全分不出来
+    const plateFill = '#b4b4b4';
+    const burnerStroke = '#5f5f5f';
     return (
-      <g transform={`rotate(${rot}, ${x}, ${z})`}>
+      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
         <rect
           x={x - localW / 2} y={z - localH / 2}
           width={localW} height={localH}
-          fill={C.furnitureDark}
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-          rx={0.04}
+          fill={plateFill}
+          stroke="#8f8f8f"
+          strokeWidth={0.025}
+          rx={0.03}
         />
         {burnerOffsets.map(([ox, oz], i) => (
-          <circle key={i} cx={x + ox} cy={z + oz} r={burnerR} fill="none" stroke={C.textDim} strokeWidth={0.03} />
+          <g key={i}>
+            <circle cx={x + ox} cy={z + oz} r={burnerR} fill="none" stroke={burnerStroke} strokeWidth={0.035} />
+            {/* 炉头内圈, 对应 3D 火盖 */}
+            <circle cx={x + ox} cy={z + oz} r={burnerR * 0.45} fill="none" stroke={burnerStroke} strokeWidth={0.025} opacity={0.85} />
+          </g>
+        ))}
+        {/* 控制旋钮 (+X 前端边缘) */}
+        {[-localH * 0.2, localH * 0.2].map((oz, i) => (
+          <circle
+            key={`knob-${i}`}
+            cx={x + localW / 2 - 0.04}
+            cy={z + oz}
+            r={0.02}
+            fill={burnerStroke}
+          />
         ))}
       </g>
     );
@@ -835,8 +972,58 @@ function Furniture2D({ furniture }: { furniture: Furniture }) {
     );
   }
 
-  // 柜子: 矩形 + 内部分隔线
+  // 柜子: 矩形 + 内部分隔线; 高柜 (h>1.5, 衣柜) 用挂衣杆 + 衣架斜线
   if (furniture.type === 'cabinet') {
+    // 与 3D Cabinet.tsx 的 isWardrobe 同口径 (h > 1.5)
+    const isWardrobe = furniture.size[1] > 1.5;
+
+    if (isWardrobe) {
+      // 衣柜: 挂衣杆画在进深正中, 衣架斜线横贯整个柜深 (背板侧 → 前缘侧),
+      // 挂衣杆从每根斜线的中点穿过 (经典 CAD 衣柜符号)。
+      // 3D 柜门朝局部 +X, 这里 rotate(-rot) 与 3D 同向 (理由同灶台: SVG rotate 与 three Y 旋转反向)
+      const backX = -localW / 2 + 0.04;           // 斜线起点距背板 0.04
+      const frontX = localW / 2 - 0.04;           // 斜线终点距前缘 0.04
+      const railHalf = localH / 2 - 0.08;
+      const n = Math.max(3, Math.round(localH / 0.25)); // 衣架数量按柜宽排布
+      const tilt = (frontX - backX) * 0.35 * 0.5; // 每半段斜移, 杆处正好是中点
+      return (
+        <g transform={`rotate(${-rot}, ${x}, ${z})`}>
+          <rect
+            x={x - localW / 2} y={z - localH / 2}
+            width={localW} height={localH}
+            fill={C.furniture}
+            stroke={C.furnitureStroke}
+            strokeWidth={0.02}
+            rx={0.03}
+          />
+          {/* 衣架斜线: 从背板侧到前缘侧, 关于杆对称, 钳制在柜体轮廓内 */}
+          {Array.from({ length: n + 1 }).map((_, i) => {
+            const zi = Math.max(
+              -railHalf + tilt,
+              Math.min(railHalf - tilt, -railHalf + 0.07 + (i * (2 * railHalf - 0.14)) / n)
+            );
+            return (
+              <line
+                key={i}
+                x1={x + backX} y1={z + zi + tilt}
+                x2={x + frontX} y2={z + zi - tilt}
+                stroke={C.textDim}
+                strokeWidth={0.025}
+                opacity={0.8}
+              />
+            );
+          })}
+          {/* 挂衣杆 (画在斜线之上, 从每根斜线中点穿过) */}
+          <line
+            x1={x} y1={z - railHalf}
+            x2={x} y2={z + railHalf}
+            stroke={C.textDim}
+            strokeWidth={0.035}
+          />
+        </g>
+      );
+    }
+
     return (
       <g transform={`rotate(${rot}, ${x}, ${z})`}>
         <rect

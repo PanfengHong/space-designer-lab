@@ -3,6 +3,7 @@ import { useThree } from '@react-three/fiber';
 import type { WallSegment } from '../../../../types';
 import { useAppStore } from '../../../../store/useAppStore';
 import { wallDragLive } from '../../../../utils/hudAnchor';
+import { PICK_FURNITURE } from '../../../../utils/pickTags';
 import * as THREE from 'three';
 
 /** 端点拖拽的实时预览回调 (wallId, edge, 新位置 / null 表示结束) */
@@ -230,7 +231,8 @@ export function Walls({
   color = '#d4d4d4',
   opacity = 1,
 }: WallsProps) {
-  const effectiveHeight = cutHeight && cutHeight < height ? cutHeight : height;
+  // 注意: 0 是合法的剖切值 (全部剖掉), 不能用真值判断 —— 否则 cutHeight=0 会回退到完整墙高
+  const effectiveHeight = cutHeight != null && cutHeight < height ? cutHeight : height;
   // 每段墙沿中心线两端各延伸 halfT, 使转角处两面墙互相搭接, 消除外角缺口
   const halfT = thickness / 2;
   // 过滤掉开放口（仅用于定义边界，不渲染墙体）
@@ -262,8 +264,21 @@ export function Walls({
     const sid = `wall:${roomId}:${seg.id}`;
     const isSelected = selectedId === sid;
     const handlePointerDown = (e: any) => {
+      if (buildingLocked) {
+        e.stopPropagation();
+        return;
+      }
+      /**
+       * 家具优先: 墙体是室内最大的遮挡物 —— 从小房间外侧/隔壁看进去时, 视线几乎
+       * 必然先穿过墙, 于是"看得见卫生间里的马桶, 却只能选中墙"。
+       * 这里检查 R3F 给出的完整命中序列: 只要其中有家具的拾取代理, 就不 stopPropagation,
+       * 让事件继续派发给墙后面的家具。想选墙时点没有被家具投影覆盖的墙面即可。
+       */
+      const hasFurnitureBehind = (e.intersections ?? []).some(
+        (it: any) => it.object?.userData?.pickKind === PICK_FURNITURE
+      );
+      if (hasFurnitureBehind) return;
       e.stopPropagation();
-      if (buildingLocked) return;
       selectStructure(sid);
     };
     const handlePointerOver = (e: any) => {

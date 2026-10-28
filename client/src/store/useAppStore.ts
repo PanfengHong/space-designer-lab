@@ -25,6 +25,17 @@ interface AppState {
   selectSpace: (id: string) => void;
   activeSpaceId: string | null;
 
+  // 相机聚焦请求 (空间目录点元素 → 相机飞到该元素上方)
+  // nonce 保证连续点同一元素也能重复触发; SpaceFocusController 消费后不清除 (留在原地无害)
+  cameraFocus: { x: number; z: number; nonce: number } | null;
+  focusCamera: (x: number, z: number) => void;
+
+  // 删除确认框 (瞬态, 不进历史栈): 所有删除入口 (Delete 键 / 属性面板删除按钮)
+  // 统一走 requestDeleteConfirm, 由 Viewport 渲染 ConfirmDialog
+  deleteConfirm: { title: string; message: string; onConfirm: () => void } | null;
+  requestDeleteConfirm: (title: string, message: string, onConfirm: () => void) => void;
+  cancelDeleteConfirm: () => void;
+
   // 设计器模式 (室内 / 户外)
   designerMode: DesignerMode;
   setDesignerMode: (mode: DesignerMode) => void;
@@ -128,8 +139,9 @@ interface AppState {
 
   // ===== 变换会话 (拖拽移动 / 旋转手柄) =====
   // 会话期间原家具隐藏, 由 3D 层的 ghost 克隆体实时跟随指针, 松手才提交 (只产生一条历史)
-  transformSession: { id: string; mode: 'move' | 'rotate' } | null;
-  beginTransform: (id: string, mode: 'move' | 'rotate') => void;
+  // startX/startY: 按下时的屏幕坐标, 供拖动阈值判断 (点选不应被当成拖动)
+  transformSession: { id: string; mode: 'move' | 'rotate'; startX?: number; startY?: number } | null;
+  beginTransform: (id: string, mode: 'move' | 'rotate', startX?: number, startY?: number) => void;
   endTransform: () => void;
 
   // ===== 撤销 / 重做 =====
@@ -255,6 +267,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   spaces: mockSceneData.rooms.map((r, i) => ({ id: r.id, name: r.name, order: i + 1 })),
   activeSpaceId: null,
   selectSpace: (id) => set({ activeSpaceId: id }),
+
+  cameraFocus: null,
+  focusCamera: (x, z) =>
+    set((s) => ({ cameraFocus: { x, z, nonce: (s.cameraFocus?.nonce ?? 0) + 1 } })),
+
+  deleteConfirm: null,
+  requestDeleteConfirm: (title, message, onConfirm) => set({ deleteConfirm: { title, message, onConfirm } }),
+  cancelDeleteConfirm: () => set({ deleteConfirm: null }),
 
   // 设置场景数据, 同时刷新 spaces 列表和清除选中状态
   setSceneData: (scene) =>
@@ -544,7 +564,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ===== 变换会话 =====
   transformSession: null,
-  beginTransform: (id, mode) => set({ transformSession: { id, mode } }),
+  beginTransform: (id, mode, startX, startY) => set({ transformSession: { id, mode, startX, startY } }),
   endTransform: () => set({ transformSession: null }),
 
   // ===== 撤销 / 重做 =====
@@ -883,4 +903,3 @@ export const useAppStore = create<AppState>((set, get) => ({
     return true;
   },
 }));
-

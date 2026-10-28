@@ -58,17 +58,23 @@ export function useDesignerShortcuts() {
       // 其余带修饰键的组合交给浏览器/系统
       if (mod || e.altKey) return;
 
-      // ---- 删除 ----
+      // ---- 删除 (统一弹确认框, 由 Viewport 渲染 ConfirmDialog) ----
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (outdoor) {
           if (s.selectedGroundId) {
             e.preventDefault();
-            s.removeGroundItem(s.selectedGroundId);
+            const g = s.outdoorSceneData.ground.find((x) => x.id === s.selectedGroundId);
+            s.requestDeleteConfirm('删除地面元素', `确定要删除「${g?.name ?? '选中地面元素'}」吗？删除后可通过 Ctrl+Z 撤销。`, () => {
+              useAppStore.getState().removeGroundItem(s.selectedGroundId!);
+            });
             return;
           }
           if (s.selectedOutdoorObjectId) {
             e.preventDefault();
-            s.removeOutdoorObject(s.selectedOutdoorObjectId);
+            const o = s.outdoorSceneData.objects.find((x) => x.id === s.selectedOutdoorObjectId);
+            s.requestDeleteConfirm('删除空间对象', `确定要删除「${o?.name ?? '选中空间对象'}」吗？删除后可通过 Ctrl+Z 撤销。`, () => {
+              useAppStore.getState().removeOutdoorObject(s.selectedOutdoorObjectId!);
+            });
             return;
           }
           return;
@@ -76,12 +82,17 @@ export function useDesignerShortcuts() {
         // 室内: 家具优先, 其次建筑结构元素
         if (s.selectedFurnitureId) {
           e.preventDefault();
-          s.removeFurniture(s.selectedFurnitureId);
+          const f = findFurniture(s.sceneData, s.selectedFurnitureId);
+          s.requestDeleteConfirm('删除家具', `确定要删除「${f?.name ?? '选中家具'}」吗？删除后可通过 Ctrl+Z 撤销。`, () => {
+            useAppStore.getState().removeFurniture(s.selectedFurnitureId!);
+          });
           return;
         }
         if (s.selectedStructureId) {
           e.preventDefault();
-          s.removeStructure(s.selectedStructureId);
+          s.requestDeleteConfirm('删除建筑结构', '确定要删除选中的建筑结构元素吗？删除后可通过 Ctrl+Z 撤销。', () => {
+            useAppStore.getState().removeStructure(s.selectedStructureId!);
+          });
           return;
         }
         return;

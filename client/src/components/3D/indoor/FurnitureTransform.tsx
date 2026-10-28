@@ -11,6 +11,9 @@ import type { Furniture } from '../../../types';
 /** 旋转手柄拖动时的角度吸附步长 (度) */
 const ROT_STEP = 15;
 
+/** 指针移动超过该像素距离才算"拖动" —— 否则只是点选, 不该进入移动判定 */
+const DRAG_THRESHOLD = 4;
+
 /**
  * 环形指示器的统一半径基准 (相对家具占地外接圆半径的增量, 单位米)。
  *
@@ -35,6 +38,13 @@ interface Footprint {
   h: number;
 }
 
+/**
+ * 用 size[0] 作为局部 X 轴建模的素材 —— 与项目约定 (X = size[2], Z = size[0]) 相反。
+ * 占位盒必须跟着各自的建模轴向走, 否则高亮框/落点环会和视觉差 90°。
+ * (Toilet: tankW = w*0.85 直接作为 X; Chair: boxGeometry args=[w, seatT, d])
+ */
+const X_IS_SIZE0 = new Set<string>(['toilet', 'chair']);
+
 /** 家具占地半长 — 与 collision.ts 的 furnitureObb 完全同口径 */
 function localFootprint(f: Furniture): Footprint {
   if (f.type === 'shower') {
@@ -43,6 +53,9 @@ function localFootprint(f: Furniture): Footprint {
       return { hx: r / 2, hz: r / 2, ox: r / 2, oz: r / 2, h: f.size[1] };
     }
     return { hx: f.size[0] / 2, hz: f.size[2] / 2, ox: f.size[0] / 2, oz: f.size[2] / 2, h: f.size[1] };
+  }
+  if (X_IS_SIZE0.has(f.type)) {
+    return { hx: f.size[0] / 2, hz: f.size[2] / 2, ox: 0, oz: 0, h: f.size[1] };
   }
   return { hx: f.size[2] / 2, hz: f.size[0] / 2, ox: 0, oz: 0, h: f.size[1] };
 }
@@ -193,7 +206,23 @@ export function FurnitureTransformController({ colliders }: { colliders: IndoorC
     const ctl = controls as unknown as { enabled: boolean } | null;
     if (ctl) ctl.enabled = false;
 
+    /**
+     * 点选 vs 拖动: 指针离开起点超过 DRAG_THRESHOLD 像素才真正开始移动判定。
+     * 否则"点一下家具想选中它"会被当成"拖回原地", 触发一次占位校验并可能弹出
+     * "此处不可放置"的红字 —— 尤其贴墙摆放的家具 (如卫生间的马桶), 原地判定
+     * 本身就与墙相切, 用户会误以为"这个物体选不中"。
+     */
+    const startX = session.startX;
+    const startY = session.startY;
+    let dragging = startX == null || startY == null;
+
     const onMove = (e: PointerEvent) => {
+      if (!dragging) {
+        if (Math.hypot(e.clientX - (startX as number), e.clientY - (startY as number)) < DRAG_THRESHOLD) {
+          return;
+        }
+        dragging = true;
+      }
       const floor = screenToFloor(e.clientX, e.clientY);
       if (!floor) return;
       if (mode === 'move') {

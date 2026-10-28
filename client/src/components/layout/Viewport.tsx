@@ -8,6 +8,7 @@ import {
   Layers,
   Copy,
   Trash2,
+  Lock,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
@@ -19,6 +20,7 @@ import { LIGHTING_OPTIONS, LIGHTING_ICONS } from '../../constants/lighting';
 import { OUTDOOR_STYLE_OPTIONS } from '../../constants/outdoorStyles';
 import { useDesignerShortcuts } from '../../hooks/useDesignerShortcuts';
 import { PerformanceMonitor } from '../panel/PerformanceMonitor';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Toolbar, UndoRedoButtons } from './Toolbar';
 import {
   ColorRow,
@@ -61,6 +63,8 @@ const OBJECT_TYPE_LABEL: Record<string, string> = {
 export function Viewport() {
   const designerMode = useAppStore((s) => s.designerMode);
   const outdoor = designerMode === 'outdoor';
+  const deleteConfirm = useAppStore((s) => s.deleteConfirm);
+  const cancelDeleteConfirm = useAppStore((s) => s.cancelDeleteConfirm);
 
   return (
     <div className="flex-1 relative overflow-hidden h-full">
@@ -83,6 +87,19 @@ export function Viewport() {
       <InteriorSpaceCard />
       <LightingPanel />
       <ViewportHintBar />
+
+      {/* 删除确认框 (Delete 键 / 属性面板删除按钮统一入口) */}
+      {deleteConfirm && (
+        <ConfirmDialog
+          title={deleteConfirm.title}
+          message={deleteConfirm.message}
+          onCancel={cancelDeleteConfirm}
+          onConfirm={() => {
+            deleteConfirm.onConfirm();
+            cancelDeleteConfirm();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -114,7 +131,10 @@ function ViewportInfoTag() {
   const viewMode = useAppStore((s) => s.viewMode);
   const renderMode = useAppStore((s) => s.renderMode);
   const walkthroughIndex = useAppStore((s) => s.walkthroughIndex);
+  const layers = useAppStore((s) => s.layers);
   const { styleCode, styleLabel } = useStyleTag();
+  // 锁定层里的对象在 3D 中不参与拾取 —— 不提示的话, 用户会以为"这个物体点不中"
+  const lockedNames = layers.filter((l) => l.locked).map((l) => l.name);
 
   return (
     <div className="absolute top-14 left-4 pointer-events-none z-10">
@@ -130,6 +150,12 @@ function ViewportInfoTag() {
             : `视角 ${walkthroughIndex + 1} / 8 · 点击蓝色光柱切换 · 拖拽环视`}
         </div>
       )}
+      {/* {lockedNames.length > 0 && (
+        <div className="mt-1 flex items-center gap-1 w-fit bg-amber-50/90 backdrop-blur-sm text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-[11px]">
+          <Lock size={11} />
+          <span>{lockedNames.join(' / ')}已锁定，解锁后才能选中</span>
+        </div>
+      )} */}
     </div>
   );
 }
@@ -230,6 +256,8 @@ function LabelToggle() {
 function InteriorViewSettings() {
   const viewSettings = useAppStore((s) => s.viewSettings);
   const updateViewSettings = useAppStore((s) => s.updateViewSettings);
+  const viewMode = useAppStore((s) => s.viewMode);
+  const isPlan = viewMode === 'plan';
   return (
     <>
       <SettingToggle
@@ -237,11 +265,14 @@ function InteriorViewSettings() {
         value={viewSettings.showSpaceName}
         onChange={(v) => updateViewSettings('showSpaceName', v)}
       />
-      <SettingToggle
-        label="尺寸标注"
-        value={!!viewSettings.showDimensions}
-        onChange={(v) => updateViewSettings('showDimensions', v)}
-      />
+      {/* 尺寸标注只存在于 2D 平面图, 3D 视图下隐藏该开关 */}
+      {isPlan && (
+        <SettingToggle
+          label="尺寸标注"
+          value={!!viewSettings.showDimensions}
+          onChange={(v) => updateViewSettings('showDimensions', v)}
+        />
+      )}
       <SettingToggle
         label="交通动线"
         value={viewSettings.showTrafficLines}
@@ -332,6 +363,7 @@ function FurniturePanel() {
   const selectFurniture = useAppStore((s) => s.selectFurniture);
   const updateFurniture = useAppStore((s) => s.updateFurniture);
   const removeFurniture = useAppStore((s) => s.removeFurniture);
+  const requestDeleteConfirm = useAppStore((s) => s.requestDeleteConfirm);
   const duplicateFurniture = useAppStore((s) => s.duplicateFurniture);
 
   const item: Furniture | null = selectedFurnitureId
@@ -439,7 +471,13 @@ function FurniturePanel() {
           <Copy size={12} /> 复制
         </button>
         <button
-          onClick={() => removeFurniture(item.id)}
+          onClick={() =>
+            requestDeleteConfirm(
+              '删除家具',
+              `确定要删除「${item.name}」吗？删除后可通过 Ctrl+Z 撤销。`,
+              () => removeFurniture(item.id),
+            )
+          }
           title="删除 (Delete)"
           className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] text-red-500 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
         >
@@ -547,6 +585,7 @@ function StructurePanel() {
   const selectStructure = useAppStore((s) => s.selectStructure);
   const updateStructure = useAppStore((s) => s.updateStructure);
   const removeStructure = useAppStore((s) => s.removeStructure);
+  const requestDeleteConfirm = useAppStore((s) => s.requestDeleteConfirm);
 
   const st = resolveStructure(selectedStructureId, sceneData);
   if (!st || !selectedStructureId) return null;
@@ -560,7 +599,14 @@ function StructurePanel() {
       title="建筑结构属性"
       onClose={() => selectStructure(null)}
       onDelete={
-        selectedStructureId.startsWith('floor:') ? undefined : () => removeStructure(selectedStructureId)
+        selectedStructureId.startsWith('floor:')
+          ? undefined
+          : () =>
+              requestDeleteConfirm(
+                '删除建筑结构',
+                `确定要删除「${st.name}」吗？删除后可通过 Ctrl+Z 撤销。`,
+                () => removeStructure(selectedStructureId),
+              )
       }
     >
       <PropRow label="类型" value={st.type} />
@@ -873,6 +919,7 @@ function OutdoorGroundPanel() {
   const selectGround = useAppStore((s) => s.selectGround);
   const updateGroundItem = useAppStore((s) => s.updateGroundItem);
   const removeGroundItem = useAppStore((s) => s.removeGroundItem);
+  const requestDeleteConfirm = useAppStore((s) => s.requestDeleteConfirm);
 
   const item = selectedGroundId
     ? (outdoorSceneData.ground.find((g) => g.id === selectedGroundId) ?? null)
@@ -883,7 +930,13 @@ function OutdoorGroundPanel() {
     <PropertyCard
       title="地面结构属性"
       onClose={() => selectGround(null)}
-      onDelete={() => removeGroundItem(item.id)}
+      onDelete={() =>
+        requestDeleteConfirm(
+          '删除地面元素',
+          `确定要删除「${item.name}」吗？删除后可通过 Ctrl+Z 撤销。`,
+          () => removeGroundItem(item.id),
+        )
+      }
     >
       <PropRow label="名称" value={item.name} />
       <PropRow label="类型" value={GROUND_TYPE_LABEL[item.type] ?? item.type} />
@@ -916,6 +969,7 @@ function OutdoorObjectPanel() {
   const selectOutdoorObject = useAppStore((s) => s.selectOutdoorObject);
   const updateOutdoorObject = useAppStore((s) => s.updateOutdoorObject);
   const removeOutdoorObject = useAppStore((s) => s.removeOutdoorObject);
+  const requestDeleteConfirm = useAppStore((s) => s.requestDeleteConfirm);
 
   const item = selectedOutdoorObjectId
     ? (outdoorSceneData.objects.find((o) => o.id === selectedOutdoorObjectId) ?? null)
@@ -926,7 +980,13 @@ function OutdoorObjectPanel() {
     <PropertyCard
       title="空间对象属性"
       onClose={() => selectOutdoorObject(null)}
-      onDelete={() => removeOutdoorObject(item.id)}
+      onDelete={() =>
+        requestDeleteConfirm(
+          '删除空间对象',
+          `确定要删除「${item.name}」吗？删除后可通过 Ctrl+Z 撤销。`,
+          () => removeOutdoorObject(item.id),
+        )
+      }
     >
       <PropRow label="名称" value={item.name} />
       <PropRow label="类型" value={OBJECT_TYPE_LABEL[item.type] ?? item.type} />

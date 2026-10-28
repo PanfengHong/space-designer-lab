@@ -120,18 +120,30 @@ export function SubSection({
 
 /* ==================== 层 ==================== */
 
-/** 一个「层」: 标题 + 副标题 + 锁按钮, 解锁后显示缩进子区 */
+/**
+ * 一个「层」: 标题 + 副标题 + 锁按钮。
+ *
+ * expandable: 层内容 (素材库) 由层行右侧的展开箭头控制 —— 锁定时箭头与内容都不出现,
+ * 解锁后出现箭头, 点击直接展开素材 (中间不再套「素材库」折叠层级)。
+ * 不传 expandable (户外层) 保持旧行为: 解锁即显示全部子区。
+ */
 export function LayerGroup({
   id,
   name,
   desc,
   locked,
+  expandable = false,
+  expanded = true,
+  onToggleExpand,
   children,
 }: {
   id: string;
   name: string;
   desc: string;
   locked: boolean;
+  expandable?: boolean;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
   children?: React.ReactNode;
 }) {
   const toggleLayer = useAppStore((s) => s.toggleLayer);
@@ -143,15 +155,28 @@ export function LayerGroup({
           <div className="text-xs text-gray-800">{name}</div>
           <div className="text-[10px] text-gray-400 mt-0.5">{desc}</div>
         </div>
-        <button
-          onClick={() => toggleLayer(id)}
-          className={`transition-colors ${locked ? 'text-red-500' : 'text-green-600'}`}
-          title={locked ? '已锁定 (不可选中)' : '已解锁 (可选中)'}
-        >
-          {locked ? <Lock size={15} /> : <LockOpen size={15} />}
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => toggleLayer(id)}
+            className={`transition-colors ${locked ? 'text-red-500' : 'text-green-600'}`}
+            title={locked ? '已锁定 (不可选中)' : '已解锁 (可选中)'}
+          >
+            {locked ? <Lock size={15} /> : <LockOpen size={15} />}
+          </button>
+          {!locked && expandable && (
+            <button
+              onClick={onToggleExpand}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+              title={expanded ? '收起素材' : '展开素材'}
+            >
+              {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+          )}
+        </div>
       </div>
-      {!locked && <div className="ml-4 border-l border-gray-100">{children}</div>}
+      {!locked && (!expandable || expanded) && (
+        <div className="ml-4 border-l border-gray-100">{children}</div>
+      )}
     </>
   );
 }
@@ -171,6 +196,7 @@ export interface PanelItem {
 /**
  * 场景对象列表 (可点击选中, 选中态高亮)
  * 室内传墙体/门窗/家具, 户外传地面元素/空间对象, 行为一致。
+ * disabled: 所属层已锁定时置灰且不可选中 (保持"锁定=不可选中"的语义)
  */
 export function ItemList({
   items,
@@ -178,12 +204,14 @@ export function ItemList({
   onSelect,
   emptyText,
   maxHeight = 'max-h-32',
+  disabled = false,
 }: {
   items: PanelItem[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   emptyText?: string;
   maxHeight?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className={`${maxHeight} overflow-y-auto`}>
@@ -192,13 +220,17 @@ export function ItemList({
         : items.map((it) => (
             <div
               key={it.id}
-              className={`px-3 py-1 cursor-pointer text-[10px] truncate flex items-center gap-1.5 ${
-                selectedId === it.id
-                  ? 'bg-green-50 text-green-700'
-                  : 'text-gray-500 hover:bg-gray-50'
+              className={`px-3 py-1 text-[10px] truncate flex items-center gap-1.5 ${
+                disabled
+                  ? 'text-gray-400 opacity-50 cursor-not-allowed'
+                  : selectedId === it.id
+                    ? 'bg-green-50 text-green-700 cursor-pointer'
+                    : 'text-gray-500 hover:bg-gray-50 cursor-pointer'
               }`}
-              onClick={() => onSelect(it.id)}
-              title={it.title ?? it.label}
+              onClick={() => {
+                if (!disabled) onSelect(it.id);
+              }}
+              title={disabled ? '所属图层已锁定, 解锁后可选中' : (it.title ?? it.label)}
             >
               {it.tag && (
                 <span className="text-gray-400 shrink-0">{it.tag}</span>

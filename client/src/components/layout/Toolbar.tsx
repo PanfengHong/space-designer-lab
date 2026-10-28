@@ -10,10 +10,10 @@ const VIEW_MODES: { key: ViewMode; label: string; icon: React.ReactNode }[] = [
   { key: 'walkthrough', label: '漫游', icon: <Play size={14} /> },
 ];
 
-const RENDER_MODES: { key: RenderMode; label: string }[] = [
-  { key: 'arctic', label: 'ARCTIC' },
-  { key: 'shaded', label: 'SHADED' },
-  { key: 'material', label: 'MATERIAL' },
+const RENDER_MODES: { key: RenderMode; label: string; title: string }[] = [
+  { key: 'arctic', label: 'ARCTIC', title: '素模 — 白色粘土材质, 看体量与布局' },
+  { key: 'shaded', label: 'SHADED', title: '着色 — 固有色哑光, 无金属反射' },
+  { key: 'material', label: 'MATERIAL', title: '材质 — 完整 PBR 材质与环境反射' },
 ];
 
 /**
@@ -82,6 +82,7 @@ export function Toolbar({
             <button
               key={mode.key}
               onClick={() => setRenderMode(mode.key)}
+              title={mode.title}
               className={`px-2.5 py-1 text-[10px] tracking-wide rounded transition-colors ${
                 renderMode === mode.key
                   ? 'bg-white shadow-sm text-gray-900 font-medium'

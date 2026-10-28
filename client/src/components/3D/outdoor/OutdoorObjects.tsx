@@ -11,6 +11,9 @@ import { SchoolBuilding } from './objects/SchoolBuilding';
 import { Gate } from './objects/Gate';
 import { GuardBooth } from './objects/GuardBooth';
 
+/** 拾取代理相对占地的外扩容差 (米): 吸收鼠标落点偏差, 不改变碰撞与高亮尺寸 */
+const PICK_PAD = 0.04;
+
 /** 空间对象本体 (无外层定位, 用于场景渲染和缩略图) */
 export function OutdoorObjectContent({
   data,
@@ -83,19 +86,28 @@ function OutdoorObjectView({ data }: { data: OutdoorObject }) {
       onPointerOut={handlePointerOut}
     >
       <OutdoorObjectContent data={data} palette={palette} />
+
+      {/* 拾取代理: 与室内家具同款 —— 户外素材同样由细碎几何拼成 (树冠/树叶/车辆轮拱),
+          只靠三角面拾取会漏点并误中后方的地面或邻件。隐形盒覆盖整块占地体积, 四周留 4cm 容差。
+          户外坐标约定: local X = size[0] (w), local Z = size[2] (d)。 */}
+      <mesh position={[0, h / 2, 0]}>
+        <boxGeometry args={[w + PICK_PAD, h, d + PICK_PAD]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
+      </mesh>
+
       {isSelected && (
         <group>
-          {/* 半透明绿色高亮盒 */}
-          <mesh position={[0, h / 2, 0]}>
+          {/* 半透明绿色高亮盒 (纯装饰, 不参与拾取) */}
+          <mesh position={[0, h / 2, 0]} raycast={() => null}>
             <boxGeometry args={[w, h, d]} />
             <meshBasicMaterial color="#22c55e" transparent opacity={0.18} depthWrite={false} />
           </mesh>
           {/* 双层绿色线框 */}
-          <lineSegments position={[0, h / 2, 0]}>
+          <lineSegments position={[0, h / 2, 0]} raycast={() => null}>
             <edgesGeometry args={[new THREE.BoxGeometry(w * 1.01, h * 1.01, d * 1.01)]} />
             <lineBasicMaterial color="#16a34a" />
           </lineSegments>
-          <lineSegments position={[0, h / 2, 0]} scale={1.015}>
+          <lineSegments position={[0, h / 2, 0]} scale={1.015} raycast={() => null}>
             <edgesGeometry args={[new THREE.BoxGeometry(w * 1.01, h * 1.01, d * 1.01)]} />
             <lineBasicMaterial color="#22c55e" transparent opacity={0.6} />
           </lineSegments>

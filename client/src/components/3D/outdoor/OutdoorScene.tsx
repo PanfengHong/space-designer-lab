@@ -233,6 +233,7 @@ export function OutdoorScene() {
   const {
     viewMode,
     viewSettings,
+    renderMode,
     layers,
     resetCamera,
     selectGround,
@@ -245,6 +246,7 @@ export function OutdoorScene() {
   } = useAppStore(useShallow((s) => ({
     viewMode: s.viewMode,
     viewSettings: s.viewSettings,
+    renderMode: s.renderMode,
     layers: s.layers,
     resetCamera: s.resetCamera,
     selectGround: s.selectGround,
@@ -274,6 +276,8 @@ export function OutdoorScene() {
   }, [monochrome]);
 
   const bgColor = useMemo(() => {
+    // 素模模式: 浅灰背景衬托白色粘土体块 (优先于风格背景)
+    if (renderMode === 'arctic') return '#e8e8e8';
     // 暗色风格强制使用深色背景, 否则跟随光照模式
     if (palette.bg) return palette.bg;
     switch (viewSettings.lighting) {
@@ -282,7 +286,7 @@ export function OutdoorScene() {
       case '阴天': return '#cdd4dc';
       default: return '#dceaf6';
     }
-  }, [viewSettings.lighting, palette.bg]);
+  }, [renderMode, viewSettings.lighting, palette.bg]);
 
   // 暗色风格使用低明度网格线
   const gridConfig = useMemo<GridConfig>(() => (

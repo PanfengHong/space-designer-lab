@@ -11,6 +11,7 @@ export function TopBar() {
   const saveCurrentScene = useAppStore((s) => s.saveCurrentScene);
   const activeModelId = useAppStore((s) => s.activeModelId);
   const activeCampusItem = useAppStore((s) => s.activeCampusItem);
+  const activeModelItem = useAppStore((s) => s.activeModelItem);
 
   // 保存反馈状态
   const [savedFlash, setSavedFlash] = useState(false);
@@ -38,6 +39,10 @@ export function TopBar() {
       setTimeout(() => setSavedFlash(false), 1500);
     }
   };
+
+  // 当前模型名称 (室内 → 模型, 户外 → 园区)
+  const currentModelName =
+    (designerMode === 'outdoor' ? activeCampusItem?.name : activeModelItem?.name) ?? '未打开模型';
 
   // 按 Ctrl/Cmd + S 触发保存
   useEffect(() => {
@@ -78,14 +83,14 @@ export function TopBar() {
         </div>
       </div>
 
-      {/* 中间标签 */}
-      <div className="flex items-center gap-6 text-xs text-gray-600">
-        <span className="cursor-pointer hover:text-gray-900 transition-colors">
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 mr-2 align-middle" />
-          共享建筑
+      {/* 中间: 当前模型名称 */}
+      <div className="flex items-center gap-2 min-w-0 max-w-[36rem] px-4">
+        <span
+          className="text-xs font-medium text-gray-700 truncate"
+          title={currentModelName}
+        >
+          {currentModelName}
         </span>
-        <span className="cursor-pointer hover:text-gray-900 transition-colors">三者设计</span>
-        <span className="cursor-pointer hover:text-gray-900 transition-colors">比例实测</span>
       </div>
 
       {/* 右侧按钮 */}
