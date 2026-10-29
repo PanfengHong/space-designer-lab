@@ -791,13 +791,13 @@ function Furniture2DInteractive({ furniture }: { furniture: Furniture }) {
   const hitY = isShower ? z : z - hitH / 2;
 
   return (
-    <g>
+    <g data-fid={furniture.id} data-ftype={furniture.type}>
       <Furniture2D furniture={furniture} />
       {selected && (
         <rect
           x={hitX - 0.05} y={hitY - 0.05}
           width={hitW + 0.1} height={hitH + 0.1}
-          transform={`rotate(${furniture.rotation}, ${x}, ${z})`}
+          transform={`rotate(${-furniture.rotation}, ${x}, ${z})`}
           fill="none"
           stroke="#22c55e"
           strokeWidth={0.045}
@@ -828,10 +828,12 @@ function furnitureHitTest(f: Furniture, px: number, pz: number, pad = 0.03): boo
   const rot = ((f.rotation % 360) + 360) % 360;
   const rad = (rot * Math.PI) / 180;
   const dx = px - x, dz = pz - z;
-  // 逆旋转到家具局部坐标 (SVG 顺时针旋转的正变换是 [cos, -sin; sin, cos])
-  const lx = dx * Math.cos(rad) + dz * Math.sin(rad);
-  const lz = -dx * Math.sin(rad) + dz * Math.cos(rad);
-  return Math.abs(lx) <= w / 2 + pad && Math.abs(lz) <= h / 2 + pad;
+  // 图形以 SVG rotate(-rot) 绘制, 命中需按同一变换的逆矩阵回到局部坐标
+  const lx = dx * Math.cos(rad) - dz * Math.sin(rad);
+  const lz = dx * Math.sin(rad) + dz * Math.cos(rad);
+  // 床的床头板立在床架 -X 端外侧 0.08m, 命中盒同步向 -X 外扩, 否则点床头板选不中床
+  const padNegX = f.type === 'bed' ? pad + 0.08 : pad;
+  return lx <= w / 2 + pad && lx >= -w / 2 - padNegX && Math.abs(lz) <= h / 2 + pad;
 }
 
 /** 家具 — 极简灰阶图形, 无文字标注 */
@@ -891,10 +893,17 @@ function Furniture2D({ furniture }: { furniture: Furniture }) {
     );
   }
 
-  // 床: 主体 + 床头板
+  // 床: 与 3D Bed.tsx 同构 —— x=床长 size[2], 床头板立在 -x 端 (**床架外侧**),
+  // 所以平面图里床头板也必须画到床架外沿, 否则看不出"床头已经靠墙"。
+  // rotate(-rot): three 绕 Y 旋转与 SVG rotate 反向 (实测 rotY=+90 时局部 +X → 世界 -Z)
   if (furniture.type === 'bed') {
+    const headT = 0.08;                       // 与 3D headT 同口径
+    const pillowW = 0.4;
+    const pillowH = 0.6;
+    const pillowX = x - localW / 2 + 0.35;    // 3D: -d/2 + 0.35
     return (
-      <g transform={`rotate(${rot}, ${x}, ${z})`}>
+      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
+        {/* 床架 */}
         <rect
           x={x - localW / 2} y={z - localH / 2}
           width={localW} height={localH}
@@ -903,13 +912,35 @@ function Furniture2D({ furniture }: { furniture: Furniture }) {
           strokeWidth={0.02}
           rx={0.05}
         />
-        {/* 床头板 (靠 -H 侧) */}
+        {/* 被褥 (3D 偏 +x 0.1, 覆盖床尾) */}
         <rect
-          x={x - localW / 2} y={z - localH / 2}
-          width={localW} height={localH * 0.12}
-          fill={C.furnitureDark}
+          x={x + 0.1 - (localW - 0.05) / 2} y={z - (localH - 0.15) / 2}
+          width={localW - 0.05} height={localH - 0.15}
+          fill={C.furniture}
           stroke="none"
-          rx={0.03}
+          rx={0.04}
+        />
+        {/* 枕头 x2 — 靠床头, 长边沿 z (床宽方向) */}
+        {[-localH / 4, localH / 4].map((oz, i) => (
+          <rect
+            key={`pillow-${i}`}
+            x={pillowX - pillowW / 2} y={z + oz - pillowH / 2}
+            width={pillowW} height={pillowH}
+            fill={C.floor}
+            stroke={C.furnitureStroke}
+            strokeWidth={0.015}
+            rx={0.06}
+          />
+        ))}
+        {/* 床头板 — 床架外侧, 横跨床宽 (压深一档, 否则和被褥分不出来) */}
+        <rect
+          data-part="headboard"
+          x={x - localW / 2 - headT} y={z - localH / 2}
+          width={headT} height={localH}
+          fill="#c2c2c2"
+          stroke="#9e9e9e"
+          strokeWidth={0.015}
+          rx={0.02}
         />
       </g>
     );
@@ -919,7 +950,7 @@ function Furniture2D({ furniture }: { furniture: Furniture }) {
   // 沙发: 圆角矩形 + 坐垫分隔
   if (furniture.type === 'sofa') {
     return (
-      <g transform={`rotate(${rot}, ${x}, ${z})`}>
+      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
         <rect
           x={x - localW / 2} y={z - localH / 2}
           width={localW} height={localH}
@@ -943,7 +974,7 @@ function Furniture2D({ furniture }: { furniture: Furniture }) {
   // 桌子: 圆角矩形
   if (furniture.type === 'table') {
     return (
-      <g transform={`rotate(${rot}, ${x}, ${z})`}>
+      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
         <rect
           x={x - localW / 2} y={z - localH / 2}
           width={localW} height={localH}
@@ -959,7 +990,7 @@ function Furniture2D({ furniture }: { furniture: Furniture }) {
   // 椅子: 小圆角方形
   if (furniture.type === 'chair') {
     return (
-      <g transform={`rotate(${rot}, ${x}, ${z})`}>
+      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
         <rect
           x={x - localW / 2} y={z - localH / 2}
           width={localW} height={localH}
@@ -1025,7 +1056,7 @@ function Furniture2D({ furniture }: { furniture: Furniture }) {
     }
 
     return (
-      <g transform={`rotate(${rot}, ${x}, ${z})`}>
+      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
         <rect
           x={x - localW / 2} y={z - localH / 2}
           width={localW} height={localH}
@@ -1049,7 +1080,7 @@ function Furniture2D({ furniture }: { furniture: Furniture }) {
   // 马桶: 椭圆 + 水箱
   if (furniture.type === 'toilet') {
     return (
-      <g transform={`rotate(${rot}, ${x}, ${z})`}>
+      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
         {/* 水箱 */}
         <rect
           x={x - localW / 2} y={z - localH / 2}
@@ -1074,7 +1105,7 @@ function Furniture2D({ furniture }: { furniture: Furniture }) {
   // 洗手台: 矩形 + 盆
   if (furniture.type === 'sink') {
     return (
-      <g transform={`rotate(${rot}, ${x}, ${z})`}>
+      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
         <rect
           x={x - localW / 2} y={z - localH / 2}
           width={localW} height={localH}
@@ -1098,7 +1129,7 @@ function Furniture2D({ furniture }: { furniture: Furniture }) {
   // 冰箱: 矩形 + 门缝
   if (furniture.type === 'fridge') {
     return (
-      <g transform={`rotate(${rot}, ${x}, ${z})`}>
+      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
         <rect
           x={x - localW / 2} y={z - localH / 2}
           width={localW} height={localH}
@@ -1122,7 +1153,7 @@ function Furniture2D({ furniture }: { furniture: Furniture }) {
   // 洗衣机: 矩形 + 圆形门
   if (furniture.type === 'washer') {
     return (
-      <g transform={`rotate(${rot}, ${x}, ${z})`}>
+      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
         <rect
           x={x - localW / 2} y={z - localH / 2}
           width={localW} height={localH}
@@ -1144,7 +1175,7 @@ function Furniture2D({ furniture }: { furniture: Furniture }) {
 
   // 其他: 通用圆角矩形
   return (
-    <g transform={`rotate(${rot}, ${x}, ${z})`}>
+    <g transform={`rotate(${-rot}, ${x}, ${z})`}>
       <rect
         x={x - localW / 2} y={z - localH / 2}
         width={localW} height={localH}
@@ -1169,7 +1200,7 @@ function Shower2D({ furniture }: { furniture: Furniture }) {
   if (shape === 'quarter') {
     const r = w;
     return (
-      <g transform={`rotate(${rot}, ${x}, ${z})`}>
+      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
         <path
           d={`M ${x} ${z} L ${x + r} ${z} A ${r} ${r} 0 0 1 ${x} ${z + r} Z`}
           fill={fill}
@@ -1191,7 +1222,7 @@ function Shower2D({ furniture }: { furniture: Furniture }) {
   const rw = w;
   const rh = d;
   return (
-    <g transform={`rotate(${rot}, ${x}, ${z})`}>
+    <g transform={`rotate(${-rot}, ${x}, ${z})`}>
       <rect
         x={x} y={z} width={rw} height={rh}
         fill={fill}
