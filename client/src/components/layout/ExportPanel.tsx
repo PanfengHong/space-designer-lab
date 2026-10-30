@@ -11,6 +11,46 @@ import { exportSceneAsGlb, downloadBlob, sanitizeFileName } from '../../utils/ex
  * - 格式: 暂只支持 GLB (二进制 glTF 2.0), 其余格式占位展示
  * - 仅导出可见对象: 隐藏的 ghost/辅助对象不进文件 (默认开)
  */
+/**
+ * 导出模型按钮 (图标按钮, 自带下拉面板, 放在视口工具条撤销/重做的右边)
+ *
+ * - 只保留图标, 悬停有 title 提示
+ * - 自含开关状态 + 点击面板外部关闭
+ * - onOpenChange 供调用方避让: 面板挂在视口右上角, 会和「视图设置」浮层重叠,
+ *   由 Viewport 在打开时临时收起视图设置、关闭后恢复
+ */
+export function ExportModelButton({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    onOpenChange?.(open);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        title="导出模型"
+        className={`p-1.5 rounded-md transition-colors`}
+      >
+        <Download size={14} />
+      </button>
+      {open && <ExportPanel onClose={() => setOpen(false)} />}
+    </div>
+  );
+}
+
 export function ExportPanel({ onClose }: { onClose: () => void }) {
   const designerMode = useAppStore((s) => s.designerMode);
   const activeModelItem = useAppStore((s) => s.activeModelItem);

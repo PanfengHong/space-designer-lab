@@ -247,7 +247,7 @@ export function buildIndoorColliders(sceneData: SceneData): IndoorColliders {
   for (const room of sceneData.rooms) {
     colliders.rooms.push(roomBounds(room));
     for (const seg of room.walls) {
-      for (const obb of wallObbs(seg, sceneData.wallThickness)) {
+      for (const obb of wallObbs(seg, seg.thickness ?? sceneData.wallThickness)) {
         colliders.walls.push({ obb, name: '墙体' });
       }
     }

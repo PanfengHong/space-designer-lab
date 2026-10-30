@@ -40,7 +40,7 @@ export function Toolbar({
   const activePreset = presets.includes(cameraPreset) ? cameraPreset : presets[0];
 
   return (
-    <div className="absolute top-0 left-0 right-0 h-11 bg-white/90 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-3 z-20 select-none">
+    <div className="absolute top-0 left-0 right-0 h-11 bg-white/90 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-3 z-40 select-none">
       {/* 视图模式 + 视角预设 */}
       <div className="flex items-center gap-0.5">
         {VIEW_MODES.map((mode) => (

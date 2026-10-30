@@ -10,7 +10,7 @@ import {
   Trash2,
   Lock,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { Scene } from '../3D/indoor/IndoorScene';
 import { OutdoorScene } from '../3D/outdoor/OutdoorScene';
@@ -22,6 +22,7 @@ import { useDesignerShortcuts } from '../../hooks/useDesignerShortcuts';
 import { PerformanceMonitor } from '../panel/PerformanceMonitor';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Toolbar, UndoRedoButtons } from './Toolbar';
+import { ExportModelButton } from './ExportPanel';
 import {
   ColorRow,
   PositionRows,
@@ -65,6 +66,10 @@ export function Viewport() {
   const outdoor = designerMode === 'outdoor';
   const deleteConfirm = useAppStore((s) => s.deleteConfirm);
   const cancelDeleteConfirm = useAppStore((s) => s.cancelDeleteConfirm);
+  // 视图设置面板的开关提升到这里: 导出下拉面板挂在工具条最右端, 会和视图设置浮层压在一起,
+  // 打开导出面板时先临时收起视图设置, 关闭后还原 (见 ExportModelButton 的 onOpenChange)
+  const [showSettings, setShowSettings] = useState(true);
+  const settingsBeforeExport = useRef<boolean | null>(null);
 
   return (
     <div className="flex-1 relative overflow-hidden h-full">
@@ -79,11 +84,24 @@ export function Viewport() {
 
       <Toolbar presets={outdoor ? OUTDOOR_PRESETS : INTERIOR_PRESETS}>
         <UndoRedoButtons />
+        {/* 导出模型: 图标按钮, 下拉面板向左下展开 (紧贴撤销/重做右侧) */}
+        <div className="w-px h-5 bg-gray-200 mx-0.5" />
+        <ExportModelButton
+          onOpenChange={(open) => {
+            if (open) {
+              settingsBeforeExport.current = showSettings;
+              setShowSettings(false);
+            } else if (settingsBeforeExport.current !== null) {
+              setShowSettings(settingsBeforeExport.current);
+              settingsBeforeExport.current = null;
+            }
+          }}
+        />
       </Toolbar>
 
       <ViewportInfoTag />
       <ViewportTopRightButtons />
-      <ViewportPanelColumn />
+      <ViewportPanelColumn showSettings={showSettings} setShowSettings={setShowSettings} />
       <InteriorSpaceCard />
       <LightingPanel />
       <ViewportHintBar />
@@ -190,9 +208,14 @@ function ViewportTopRightButtons() {
  * 右侧悬浮面板列: 纵向自动堆叠, 由内容决定高度, 面板之间不重叠。
  * (统一走这个 flex 列容器, 不要再给单个面板写 absolute/top 硬定位)
  */
-function ViewportPanelColumn() {
+function ViewportPanelColumn({
+  showSettings,
+  setShowSettings,
+}: {
+  showSettings: boolean;
+  setShowSettings: (v: boolean) => void;
+}) {
   const outdoor = useAppStore((s) => s.designerMode === 'outdoor');
-  const [showSettings, setShowSettings] = useState(true);
 
   return (
     <div className="absolute top-[104px] right-2 z-30 flex flex-col items-end gap-2 max-h-[calc(100%-8rem)] overflow-y-auto px-2 py-2 select-none">
@@ -602,11 +625,11 @@ function StructurePanel() {
         selectedStructureId.startsWith('floor:')
           ? undefined
           : () =>
-              requestDeleteConfirm(
-                '删除建筑结构',
-                `确定要删除「${st.name}」吗？删除后可通过 Ctrl+Z 撤销。`,
-                () => removeStructure(selectedStructureId),
-              )
+            requestDeleteConfirm(
+              '删除建筑结构',
+              `确定要删除「${st.name}」吗？删除后可通过 Ctrl+Z 撤销。`,
+              () => removeStructure(selectedStructureId),
+            )
       }
     >
       <PropRow label="类型" value={st.type} />
@@ -1089,11 +1112,10 @@ function LightingPanel() {
             <button
               key={opt}
               onClick={() => updateViewSettings('lighting', opt)}
-              className={`flex flex-col items-center gap-0.5 py-1.5 rounded text-[9px] transition-colors ${
-                viewSettings.lighting === opt
+              className={`flex flex-col items-center gap-0.5 py-1.5 rounded text-[9px] transition-colors ${viewSettings.lighting === opt
                   ? 'bg-gray-900 text-white'
                   : 'text-gray-500 hover:bg-gray-100'
-              }`}
+                }`}
               title={opt}
             >
               {LIGHTING_ICONS[opt]?.(13)}

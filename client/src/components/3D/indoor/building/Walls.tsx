@@ -233,8 +233,6 @@ export function Walls({
 }: WallsProps) {
   // 注意: 0 是合法的剖切值 (全部剖掉), 不能用真值判断 —— 否则 cutHeight=0 会回退到完整墙高
   const effectiveHeight = cutHeight != null && cutHeight < height ? cutHeight : height;
-  // 每段墙沿中心线两端各延伸 halfT, 使转角处两面墙互相搭接, 消除外角缺口
-  const halfT = thickness / 2;
   // 过滤掉开放口（仅用于定义边界，不渲染墙体）
   const solidWalls = segments.filter((s) => !s.opening);
 
@@ -309,7 +307,11 @@ export function Walls({
         const midZ = (z1 + z2) / 2;
 
         const { isSelected, handlePointerDown, handlePointerOver, handlePointerOut } = makeHandlers(seg);
-        const hlLen = length + thickness;
+        // 单墙厚度: 墙段可携带自己的 thickness (内隔墙 0.12), 缺省回落房间级 wallThickness
+        const segT = segEff.thickness ?? thickness;
+        // 每段墙沿中心线两端各延伸 halfT, 使转角处两面墙互相搭接, 消除外角缺口
+        const halfT = segT / 2;
+        const hlLen = length + segT;
 
         // 无 cutout 或者洞口宽度极小：整面墙一个 box
         if (!seg.cutout) {
@@ -326,7 +328,7 @@ export function Walls({
                 castShadow
                 receiveShadow
               >
-                <boxGeometry args={[hlLen, effectiveHeight, thickness]} />
+                <boxGeometry args={[hlLen, effectiveHeight, segT]} />
                 <meshStandardMaterial
                   color={color}
                   transparent={opacity < 1}
@@ -335,7 +337,7 @@ export function Walls({
                   envMapIntensity={0.35}
                 />
               </mesh>
-              {isSelected && <WallSelection seg={segEff} roomId={roomId} midX={midX} midZ={midZ} angle={angle} hlLen={hlLen} effectiveHeight={effectiveHeight} thickness={thickness} onPreview={handlePreview} />}
+              {isSelected && <WallSelection seg={segEff} roomId={roomId} midX={midX} midZ={midZ} angle={angle} hlLen={hlLen} effectiveHeight={effectiveHeight} thickness={segT} onPreview={handlePreview} />}
             </group>
           );
         }
@@ -367,7 +369,7 @@ export function Walls({
                 castShadow
                 receiveShadow
               >
-                <boxGeometry args={[hlLen, effectiveHeight, thickness]} />
+                <boxGeometry args={[hlLen, effectiveHeight, segT]} />
                 <meshStandardMaterial
                   color={color}
                   transparent={opacity < 1}
@@ -376,7 +378,7 @@ export function Walls({
                   envMapIntensity={0.35}
                 />
               </mesh>
-              {isSelected && <WallSelection seg={segEff} roomId={roomId} midX={midX} midZ={midZ} angle={angle} hlLen={hlLen} effectiveHeight={effectiveHeight} thickness={thickness} onPreview={handlePreview} />}
+              {isSelected && <WallSelection seg={segEff} roomId={roomId} midX={midX} midZ={midZ} angle={angle} hlLen={hlLen} effectiveHeight={effectiveHeight} thickness={segT} onPreview={handlePreview} />}
             </group>
           );
         }
@@ -441,7 +443,7 @@ export function Walls({
                   castShadow
                   receiveShadow
                 >
-                  <boxGeometry args={[p.len, p.ySize, thickness]} />
+                  <boxGeometry args={[p.len, p.ySize, segT]} />
                   <meshStandardMaterial
                     color={color}
                     transparent={opacity < 1}
@@ -452,7 +454,7 @@ export function Walls({
                 </mesh>
               );
             })}
-            {isSelected && <WallSelection seg={segEff} roomId={roomId} midX={midX} midZ={midZ} angle={angle} hlLen={hlLen} effectiveHeight={effectiveHeight} thickness={thickness} onPreview={handlePreview} />}
+            {isSelected && <WallSelection seg={segEff} roomId={roomId} midX={midX} midZ={midZ} angle={angle} hlLen={hlLen} effectiveHeight={effectiveHeight} thickness={segT} onPreview={handlePreview} />}
           </group>
         );
       })}

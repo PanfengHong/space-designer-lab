@@ -140,7 +140,7 @@ export const twoBedroomScene: SceneData = {
       ],
       frenchWindows: [],
       furniture: [
-        { id: 'f-tmb1', name: '双人床', position: [1, 0, 4.9], rotation: 90, size: [1.8, 0.45, 2.0], type: 'bed', color: '#e8e0d4' },
+        { id: 'f-tmb1', name: '双人床', position: [1, 0, 4.81], rotation: 90, size: [1.8, 0.45, 2.0], type: 'bed', color: '#e8e0d4' }, // 床头板凸出占地 0.08, 离南墙内面 1cm
         { id: 'f-tmb2', name: '衣柜', position: [0.35, 0, 3], rotation: 0, size: [1.8, 2.45, 0.5], type: 'cabinet', color: '#d4c5b0' },
         { id: 'f-tmb3', name: '床头柜', position: [1.675, 0, 2.5], rotation: 0, size: [0.5, 0.5, 0.45], type: 'cabinet', color: '#8b7355' },
       ],
@@ -168,7 +168,7 @@ export const twoBedroomScene: SceneData = {
       bayWindows: [],
       frenchWindows: [],
       furniture: [
-        { id: 'f-tsb1', name: '单人床', position: [7.3, 0, 1.9], rotation: 90, size: [1.2, 0.45, 2.0], type: 'bed', color: '#d4c5b0' },
+        { id: 'f-tsb1', name: '单人床', position: [7.3, 0, 1.81], rotation: 90, size: [1.2, 0.45, 2.0], type: 'bed', color: '#d4c5b0' }, // 床头板凸出占地 0.08, 离南墙(0.2)内面 1cm
         { id: 'f-tsb2', name: '书桌', position: [6.4, 0, 0.7], rotation: 0, size: [1.2, 0.75, 0.6], type: 'table', color: '#5c4033' },
       ],
     },

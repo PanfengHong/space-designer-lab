@@ -146,6 +146,35 @@ interface BuildingProps {
 }
 
 /**
+ * 按所在墙的单墙厚度给门窗分组: 墙段可携带自己的 thickness (内隔墙 0.12),
+ * 门框/窗框的深度要与所在墙的厚度一致, 否则 0.2m 框装在 0.12m 墙上会两侧突出。
+ * 找不到所属墙时回落房间级 wallThickness。
+ */
+function groupByWallT<T extends { position: [number, number, number] }>(
+  items: T[],
+  walls: WallSegment[],
+  fallback: number,
+): Map<number, T[]> {
+  const resolveT = (x: number, z: number): number => {
+    for (const seg of walls) {
+      const [x1, z1] = seg.start;
+      const [x2, z2] = seg.end;
+      const len = Math.sqrt((x2 - x1) ** 2 + (z2 - z1) ** 2);
+      if (len === 0) continue;
+      if (projectOnWall(x, z, x1, z1, x2, z2, len).onWall) return seg.thickness ?? fallback;
+    }
+    return fallback;
+  };
+  const groups = new Map<number, T[]>();
+  for (const it of items) {
+    const t = resolveT(it.position[0], it.position[2]);
+    if (!groups.has(t)) groups.set(t, []);
+    groups.get(t)!.push(it);
+  }
+  return groups;
+}
+
+/**
  * 建筑结构层 — 统一渲染地板、墙体、门、窗、飘窗、落地窗
  */
 export function Building({
@@ -190,35 +219,45 @@ export function Building({
         showCeiling={showCeiling}
         color={wallColor}
       />
-      <Doors
-        doors={room.doors}
-        roomId={room.id}
-        wallThickness={wallThickness}
-        doorsOpen={doorsOpen}
-        monochrome={monochrome}
-      />
-      <Windows
-        windows={room.windows}
-        roomId={room.id}
-        wallThickness={wallThickness}
-        monochrome={monochrome}
-      />
-      {room.bayWindows && room.bayWindows.length > 0 && (
-        <BayWindows
-          bayWindows={room.bayWindows}
+      {[...groupByWallT(room.doors, room.walls, wallThickness).entries()].map(([t, doors]) => (
+        <Doors
+          key={`doors-t${t}`}
+          doors={doors}
           roomId={room.id}
-          wallThickness={wallThickness}
+          wallThickness={t}
+          doorsOpen={doorsOpen}
           monochrome={monochrome}
         />
-      )}
-      {room.frenchWindows && room.frenchWindows.length > 0 && (
-        <FrenchWindows
-          frenchWindows={room.frenchWindows}
+      ))}
+      {[...groupByWallT(room.windows, room.walls, wallThickness).entries()].map(([t, wins]) => (
+        <Windows
+          key={`wins-t${t}`}
+          windows={wins}
           roomId={room.id}
-          wallThickness={wallThickness}
+          wallThickness={t}
           monochrome={monochrome}
         />
-      )}
+      ))}
+      {room.bayWindows && room.bayWindows.length > 0 &&
+        [...groupByWallT(room.bayWindows, room.walls, wallThickness).entries()].map(([t, bws]) => (
+          <BayWindows
+            key={`bws-t${t}`}
+            bayWindows={bws}
+            roomId={room.id}
+            wallThickness={t}
+            monochrome={monochrome}
+          />
+        ))}
+      {room.frenchWindows && room.frenchWindows.length > 0 &&
+        [...groupByWallT(room.frenchWindows, room.walls, wallThickness).entries()].map(([t, fws]) => (
+          <FrenchWindows
+            key={`fws-t${t}`}
+            frenchWindows={fws}
+            roomId={room.id}
+            wallThickness={t}
+            monochrome={monochrome}
+          />
+        ))}
       {room.stairs && room.stairs.length > 0 && (
         <Stairs flights={room.stairs} roomId={room.id} />
       )}

@@ -305,6 +305,11 @@ function WalkthroughLook({ walkthroughIndex, setWalkthroughIndex, activeSpaceId 
 }
 
 /* ==================== 室内场景配置常量 ==================== */
+// 取景距离说明: 主户型平面 11.5×12.2m, 中心约在 (CENTER_X, CENTER_Z)。
+// 原来透视离中心 ~18.2m、轴测 ~21.4m, 模型上下几乎顶满画面, 显得很"近";
+// 现统一退到 ~24.4m / ~25.5m, 模型约占画面高度 6 成, 四周留出余量。
+// 只放大"相机到中心"的距离、方位角与仰角不变, 所以构图角度不变, 只是整体退远;
+// 轴测原来比透视远 18% 导致显得更小, 这里把两者距离拉平。
 const INDOOR_CAMERA_PRESETS: Record<ViewMode, CameraPreset> = {
   perspective: { position: [CENTER_X + 9, 13, CENTER_Z + 9], target: [CENTER_X, 0, CENTER_Z] },
   axonometric: { position: [CENTER_X + 10, 16, CENTER_Z + 10], target: [CENTER_X, 0, CENTER_Z] },

@@ -32,6 +32,8 @@ export interface WallSegment {
   start: [number, number];
   end: [number, number];
   height: number;
+  /** 单墙厚度 (m)。缺省回落到 sceneData.wallThickness; 内隔墙可用 0.12, 承重外墙 0.2 */
+  thickness?: number;
   opening?: boolean; // true 表示此处为开放口（无墙体），仅用于定义房间边界
   // 墙洞 (如飘窗洞口): 沿墙长度方向 [start, end] 区间, 高度方向 [sill, top] 区间开洞
   cutout?: {

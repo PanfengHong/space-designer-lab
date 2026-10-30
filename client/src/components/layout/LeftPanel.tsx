@@ -178,8 +178,6 @@ function InteriorSections({ expanded, toggle }: { expanded: Record<SectionKey, b
   const [openSpaces, setOpenSpaces] = useState<Record<string, boolean>>({});
   // 空间下的元素分组展开态, key = `${spaceId}:${kind}`
   const [openSub, setOpenSub] = useState<Record<string, boolean>>({});
-  const [allOpen, setAllOpen] = useState(false);
-  const [allSub, setAllSub] = useState({ walls: false, doors: false, windows: false, furniture: false });
   const [buildingCatalogOpen, setBuildingCatalogOpen] = useState(true);
   const [interiorCatalogOpen, setInteriorCatalogOpen] = useState(true);
 
@@ -328,7 +326,7 @@ function InteriorSections({ expanded, toggle }: { expanded: Record<SectionKey, b
                     items={g.furniture}
                     selectedId={selectedFurnitureId}
                     onSelect={pickFurniture}
-                    open={openSub[`${space.id}:furniture`] ?? true}
+                    open={!!openSub[`${space.id}:furniture`]}
                     onToggle={() => toggleSub(`${space.id}:furniture`)}
                     emptyText="暂无家具"
                   />
@@ -337,57 +335,6 @@ function InteriorSections({ expanded, toggle }: { expanded: Record<SectionKey, b
             </div>
           );
         })}
-
-        {/* 全部元素 — 跨房间检索/批量场景的兜底入口 */}
-        <div
-          className="flex items-center gap-1.5 px-3 pr-1.5 py-1.5 mt-1 border-t border-gray-100 cursor-pointer hover:bg-gray-50"
-          onClick={() => setAllOpen((v) => !v)}
-        >
-          <span className="text-xs text-gray-600">全部元素</span>
-          <span className="ml-auto text-gray-400 shrink-0 p-0.5">
-            {allOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-          </span>
-        </div>
-        {allOpen && (
-          <div className="ml-5 border-l border-gray-100 pb-0.5">
-            <GroupNode
-              label="墙体"
-              items={allGroups.walls}
-              selectedId={selectedStructureId}
-              onSelect={pickStructure}
-              open={allSub.walls}
-              onToggle={() => setAllSub((s) => ({ ...s, walls: !s.walls }))}
-              emptyText="无墙体"
-            />
-            <GroupNode
-              label="门"
-              items={allGroups.doors}
-              selectedId={selectedStructureId}
-              onSelect={pickStructure}
-              open={allSub.doors}
-              onToggle={() => setAllSub((s) => ({ ...s, doors: !s.doors }))}
-              emptyText="无门"
-            />
-            <GroupNode
-              label="窗"
-              items={allGroups.windows}
-              selectedId={selectedStructureId}
-              onSelect={pickStructure}
-              open={allSub.windows}
-              onToggle={() => setAllSub((s) => ({ ...s, windows: !s.windows }))}
-              emptyText="无窗"
-            />
-            <GroupNode
-              label="家具"
-              items={allGroups.furniture}
-              selectedId={selectedFurnitureId}
-              onSelect={pickFurniture}
-              open={allSub.furniture}
-              onToggle={() => setAllSub((s) => ({ ...s, furniture: !s.furniture }))}
-              emptyText="暂无家具"
-            />
-          </div>
-        )}
       </Section>
 
       {/* 模型分层 — 只保留锁定控制 + 素材库 (元素列表已迁到空间目录) */}

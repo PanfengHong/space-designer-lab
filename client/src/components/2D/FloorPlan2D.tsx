@@ -37,6 +37,22 @@ export function FloorPlan2D() {
   const rooms = sceneData.rooms;
   const wallT = sceneData.wallThickness;
 
+  // 求某一点所在墙的单墙厚度 (墙段可自带 thickness, 如内隔墙 0.12), 找不到回落全局 wallT
+  const wallTAt = (room: typeof rooms[number], x: number, z: number): number => {
+    for (const seg of room.walls) {
+      if (seg.opening) continue;
+      const [x1, z1] = seg.start;
+      const [x2, z2] = seg.end;
+      const len = Math.sqrt((x2 - x1) ** 2 + (z2 - z1) ** 2);
+      if (len === 0) continue;
+      const perp = Math.abs(x2 - x1) > Math.abs(z2 - z1) ? Math.abs(z - z1) : Math.abs(x - x1);
+      if (perp > 0.15) continue;
+      const t = ((x2 - x1) * (x - x1) + (z2 - z1) * (z - z1)) / len;
+      if (t >= -0.05 && t <= len + 0.05) return seg.thickness ?? wallT;
+    }
+    return wallT;
+  };
+
   // 缩放和平移状态
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -218,7 +234,7 @@ export function FloorPlan2D() {
         {/* 飘窗凸出结构 */}
         {rooms.map((room) =>
           room.bayWindows?.map((bw) => (
-            <BayWindow2D key={bw.id} bayWindow={bw} wallThickness={wallT} />
+            <BayWindow2D key={bw.id} bayWindow={bw} wallThickness={wallTAt(room, bw.position[0], bw.position[2])} />
           ))
         )}
 
@@ -226,7 +242,7 @@ export function FloorPlan2D() {
         {rooms.map((room) =>
           room.walls.map((wall) =>
             wall.opening ? null : (
-              <WallLine key={wall.id} wall={wall} thickness={wallT} windows={room.windows ?? []} />
+              <WallLine key={wall.id} wall={wall} thickness={wall.thickness ?? wallT} windows={room.windows ?? []} />
             )
           )
         )}
@@ -234,21 +250,21 @@ export function FloorPlan2D() {
         {/* 落地窗 */}
         {rooms.map((room) =>
           room.frenchWindows?.map((fw) => (
-            <FrenchWindow2D key={fw.id} frenchWindow={fw} wallThickness={wallT} />
+            <FrenchWindow2D key={fw.id} frenchWindow={fw} wallThickness={wallTAt(room, fw.position[0], fw.position[2])} />
           ))
         )}
 
         {/* 普通窗户 */}
         {rooms.map((room) =>
           room.windows.map((win) => (
-            <Window2D key={win.id} window={win} wallThickness={wallT} />
+            <Window2D key={win.id} window={win} wallThickness={wallTAt(room, win.position[0], win.position[2])} />
           ))
         )}
 
         {/* 门 */}
         {rooms.map((room) =>
           room.doors.map((door) => (
-            <Door2D key={door.id} door={door} wallThickness={wallT} />
+            <Door2D key={door.id} door={door} wallThickness={wallTAt(room, door.position[0], door.position[2])} />
           ))
         )}
 
