@@ -406,8 +406,8 @@ function EngineLighting({ mode, configs }: { mode: string; configs: Record<strin
         castShadow
         shadow-mapSize-width={config.shadowMapSize ?? 2048}
         shadow-mapSize-height={config.shadowMapSize ?? 2048}
-        shadow-bias={-0.0005}
-        shadow-normalBias={0.02}
+        shadow-bias={-0.0008}
+        shadow-normalBias={0.035}
       />
       <directionalLight ref={dir2Ref} />
       <hemisphereLight ref={hemiRef} />
@@ -423,17 +423,17 @@ function EngineLighting({ mode, configs }: { mode: string; configs: Record<strin
 }
 
 /* ==================== 环境光照 (离线 IBL — 用 Lightformer 拼出柔和工作室光, 无需外部 HDR) ==================== */
-function StudioEnvironment() {
+function StudioEnvironment({ scale = 1 }: { scale?: number }) {
   return (
     <Environment resolution={64} frames={1}>
       {/* 顶部大面暖光 (主柔光) */}
-      <Lightformer intensity={1.4} position={[0, 6, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[12, 12, 1]} color="#fff4e2" />
+      <Lightformer intensity={1.4 * scale} position={[0, 6, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[12, 12, 1]} color="#fff4e2" />
       {/* 左后冷补光 */}
-      <Lightformer intensity={0.55} position={[-6, 2.5, -5]} rotation={[0, Math.PI / 4, 0]} scale={[7, 4, 1]} color="#dfe9f4" />
+      <Lightformer intensity={0.55 * scale} position={[-6, 2.5, -5]} rotation={[0, Math.PI / 4, 0]} scale={[7, 4, 1]} color="#dfe9f4" />
       {/* 右前暖补光 */}
-      <Lightformer intensity={0.45} position={[6, 2.5, 6]} rotation={[0, -Math.PI * 0.75, 0]} scale={[7, 4, 1]} color="#f3ede2" />
+      <Lightformer intensity={0.45 * scale} position={[6, 2.5, 6]} rotation={[0, -Math.PI * 0.75, 0]} scale={[7, 4, 1]} color="#f3ede2" />
       {/* 背面淡蓝环境 */}
-      <Lightformer intensity={0.35} position={[0, 2, -8]} scale={[10, 4, 1]} color="#e8eef6" />
+      <Lightformer intensity={0.35 * scale} position={[0, 2, -8]} scale={[10, 4, 1]} color="#e8eef6" />
     </Environment>
   );
 }
@@ -484,6 +484,9 @@ export function BaseScene(props: BaseSceneProps) {
   } = props;
 
   const walkthroughIndex = useAppStore((s) => s.walkthroughIndex);
+  // 环境光强度随光照模式变化: 全向 IBL 压得住方向光, 夜景/黄昏必须减弱
+  const activeLighting = lightingConfigs[lighting] ?? Object.values(lightingConfigs)[0];
+  const envScale = activeLighting?.envIntensity ?? 1;
   const ghostHandleRef = useRef<EngineDragGhostHandle>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const hintRef = useRef<HTMLDivElement>(null);
@@ -652,7 +655,8 @@ export function BaseScene(props: BaseSceneProps) {
       shadows="soft"
       dpr={[1, 2]}
       gl={{ antialias: true }}
-      onCreated={({ gl }) => { gl.toneMappingExposure = 1.12; }}
+      /* 曝光 1.12 → 1.0: 白模/浅色风格在强方向光下会顶到纯白, 降一档保住亮部层次 */
+      onCreated={({ gl }) => { gl.toneMappingExposure = 1.0; }}
       camera={{ fov: defaultFov, near: 0.1, far: 800, position: cameraPresets.perspective.position }}
       style={{ width: '100%', height: '100%', background, touchAction: 'none' }}
       onPointerMissed={onPointerMissed}
@@ -700,7 +704,8 @@ export function BaseScene(props: BaseSceneProps) {
         )}
 
         <EngineLighting mode={lighting} configs={lightingConfigs} />
-        <StudioEnvironment />
+        {/* key 变化时重挂载 → 重新烘 PMREM; 只在切光照模式时发生, 代价可忽略 */}
+        <StudioEnvironment key={envScale} scale={envScale} />
         <ExportSceneReporter />
         <RenderModeController />
 

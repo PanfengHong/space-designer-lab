@@ -59,6 +59,7 @@ export function StepperRow({
   min,
   max,
   unit = 'm',
+  precision = 2,
   onChange,
 }: {
   label: string;
@@ -67,14 +68,16 @@ export function StepperRow({
   min?: number;
   max?: number;
   unit?: string;
+  /** 小数位。长度类用 2, 温度/百分比这类整数用 0 */
+  precision?: number;
   onChange: (v: number) => void;
 }) {
   const clamp = (v: number) => {
     if (min !== undefined && v < min) v = min;
     if (max !== undefined && v > max) v = max;
-    return Math.round(v * 100) / 100;
+    return precision === 0 ? Math.round(v) : Math.round(v * 100) / 100;
   };
-  const fmt = (v: number) => v.toFixed(2);
+  const fmt = (v: number) => v.toFixed(precision);
 
   const [draft, setDraft] = useState<string | null>(null);
   // 外部值变化 (拖动 3D 物体 / 撤销) 时同步显示; 正在输入时以用户输入为准
@@ -118,7 +121,7 @@ export function StepperRow({
         >
           +
         </button>
-        <span className="text-[10px] text-gray-400 w-3">{unit}</span>
+        <span className="text-[10px] text-gray-400 min-w-3 shrink-0">{unit}</span>
       </div>
     </div>
   );

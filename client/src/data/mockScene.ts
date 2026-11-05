@@ -202,7 +202,7 @@ export const twoBedroomScene: SceneData = {
         // 厨房水槽 (嵌入北橱柜右侧)
         { id: 'f-tk-sink', name: '厨房水槽', position: [7.5, 0.9, 3.4], rotation: 270, size: [0.5, 0.9, 0.5], type: 'sink', color: '#ffffff', embedded: true },
         // 冰箱 (靠东墙)
-        { id: 'f-tk1', name: '冰箱', position: [7.55, 0, 4.5], rotation: 270, size: [0.7, 1.8, 0.65], type: 'fridge', color: '#e0e0e0' },
+        { id: 'f-tk1', name: '冰箱', position: [7.55, 0, 4.5], rotation: 270, size: [0.7, 1.8, 0.65], type: 'fridge', color: '#e0e0e0', device: { kind: 'fridge' } },
       ],
     },
     // 卫生间 2m x 2m
@@ -474,8 +474,12 @@ export const mockSceneData: SceneData = {
         { id: 'f-l2', name: '单人沙发', position: [5.25, 0, 8.0], rotation: -90, size: [0.9, 0.85, 0.8], type: 'sofa', color: '#c8b8a0' },
         { id: 'f-l3', name: '茶几', position: [5.25, 0, 9.3], rotation: 0, size: [1.3, 0.45, 0.75], type: 'table', color: '#5c4033' },
         { id: 'f-l4', name: '电视柜', position: [6.575, 0, 9.1], rotation: 0, size: [2.2, 0.4, 0.45], type: 'cabinet', color: '#3d3d3d' },
-        { id: 'f-l5', name: '电视', position: [6.575, 1.1, 9.05], rotation: 0, size: [1.4, 0.85, 0.05], type: 'appliance', color: '#1a1a1a', embedded: true },
-        { id: 'f-l6', name: '落地灯', position: [4.05, 0, 7.0], rotation: 0, size: [0.4, 1.6, 0.4], type: 'decor', color: '#e8e0d4' },
+        { id: 'f-l5', name: '电视', position: [6.575, 1.1, 9.05], rotation: 0, size: [1.4, 0.85, 0.05], type: 'appliance', color: '#1a1a1a', embedded: true, device: { kind: 'tv' } },
+        { id: 'f-l6', name: '落地灯', position: [4.05, 0, 7.0], rotation: 0, size: [0.4, 1.6, 0.4], type: 'decor', color: '#e8e0d4', device: { kind: 'light' } },
+        // 壁挂空调 — 挂在东墙内侧上部 (墙面 x=6.9), 正面朝西
+        { id: 'f-ac1', name: '客厅空调', position: [6.76, 2.2, 8.0], rotation: 180, size: [0.95, 0.3, 0.22], type: 'ac', color: '#ffffff', device: { kind: 'ac' } },
+        // 窗帘 — 贴南侧落地窗内侧, 沿 X 展开 (rotation 90 让局部 Z 对齐世界 X)
+        { id: 'f-ctn1', name: '客厅窗帘', position: [5.25, 0, 10.42], rotation: 90, size: [3.6, 2.55, 0.12], type: 'curtain', color: '#efe7da', device: { kind: 'curtain' } },
       ],
     },
 
@@ -507,6 +511,10 @@ export const mockSceneData: SceneData = {
         { id: 'f-bb6', name: '衣柜', position: [9.35, 0, 6.9], rotation: -90, size: [2.0, 2.45, 0.5], type: 'cabinet', color: '#d4c5b0' },
         { id: 'f-bb7', name: '床头柜', position: [10.05, 0, 9.8], rotation: 180, size: [0.5, 0.5, 0.45], type: 'cabinet', color: '#8b7355' },
         { id: 'f-bb4', name: '书桌', position: [7.45, 0, 9.5], rotation: 90, size: [0.6, 0.75, 1.2], type: 'table', color: '#a0826d' },
+        // 壁挂空调 — 挂在东墙内侧上部 (墙面 x=10.4)
+        { id: 'f-ac2', name: '卧室空调', position: [10.26, 2.2, 8.0], rotation: 180, size: [0.88, 0.28, 0.2], type: 'ac', color: '#ffffff', device: { kind: 'ac' } },
+        // 窗帘 — 贴飘窗内侧 (飘窗洞 x 7.95~9.95)
+        { id: 'f-ctn2', name: '卧室窗帘', position: [8.95, 0, 10.42], rotation: 90, size: [2.2, 2.5, 0.1], type: 'curtain', color: '#e6dccd', device: { kind: 'curtain' } },
       ],
     },
 

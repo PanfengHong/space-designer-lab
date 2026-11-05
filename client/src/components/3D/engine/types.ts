@@ -39,6 +39,12 @@ export interface LightingModeConfig {
   hemiIntensity: number;
   pointLights: PointLightConfig[];
   fog: [number, string] | null;
+  /**
+   * 工作室 IBL 环境光强度倍率 (默认 1)。
+   * 环境贴图是**全向、无阴影**的柔光, 强度过高会把方向光 (阳光/月光) 的明暗与投影
+   * 全部冲平, 画面发白发灰。白天/黄昏留一点做补光, 夜景必须压到接近 0。
+   */
+  envIntensity?: number;
   castShadow?: boolean;
   shadowCameraRange?: number;
   /** 阴影贴图分辨率 (默认 2048); 户外园区范围大, 需要 4096 才能让车/树的小投影保持清晰 */

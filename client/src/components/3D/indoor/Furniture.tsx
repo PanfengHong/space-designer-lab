@@ -17,12 +17,19 @@ import { Shower } from './furniture/Shower';
 import { Sink } from './furniture/Sink';
 import { Toilet } from './furniture/Toilet';
 import { Stove } from './furniture/Stove';
+import { AirConditioner } from './furniture/AirConditioner';
+import { Curtain } from './furniture/Curtain';
 
 interface FurnitureProps {
   items: Furniture[];
   /** 所属空间 id (用于拾取仲裁: 判别点击命中的是不是"别的空间挡在前面的家具") */
   roomId: string;
   opacity?: number;
+  /**
+   * 运行态 (独立运行器): 家具一律不可选中/拖动, 但设备仍可点击。
+   * 不能用 store 的 layers 来表达 —— 那是设计器的编辑状态, 运行器不该改它。
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -200,32 +207,44 @@ function measureBounds(root: THREE.Object3D, data: Furniture): LocalBounds | nul
   return { cx: c.x, cy: c.y, cz: c.z, sx: s.x, sy: s.y, sz: s.z };
 }
 
-export function FurnitureGroup({ items, roomId }: FurnitureProps) {
+export function FurnitureGroup({ items, roomId, readOnly = false }: FurnitureProps) {
   return (
     <group>
       {items.map((item) => (
-        <FurnitureItem key={item.id} data={item} roomId={roomId} />
+        <FurnitureItem key={item.id} data={item} roomId={roomId} readOnly={readOnly} />
       ))}
     </group>
   );
 }
 
-function FurnitureItem({ data, roomId }: { data: Furniture; roomId: string }) {
+function FurnitureItem({ data, roomId, readOnly = false }: { data: Furniture; roomId: string; readOnly?: boolean }) {
   const selectFurniture = useAppStore((s) => s.selectFurniture);
+  const selectDevice = useAppStore((s) => s.selectDevice);
   const selectedId = useAppStore((s) => s.selectedFurnitureId);
   const layers = useAppStore((s) => s.layers);
   const beginTransform = useAppStore((s) => s.beginTransform);
   const isTransformTarget = useAppStore((s) => s.transformSession?.id === data.id);
   const isSelected = selectedId === data.id;
-  // 室内设计层锁定时, 家具不可选中
-  const interiorLocked = layers.find((l) => l.id === 'interior')?.locked ?? false;
+  // 室内设计层锁定时, 家具不可选中; 运行态一律视为锁定
+  const interiorLocked = readOnly || (layers.find((l) => l.id === 'interior')?.locked ?? false);
 
   const contentRef = useRef<THREE.Group>(null);
   const [bounds, setBounds] = useState<LocalBounds | null>(null);
 
   const handlePointerDown = (e: any) => {
+    /**
+     * 室内设计层锁定时只允许"设备控制":
+     * 锁的是编辑 (选中 / 拖动 / 改属性), 不该连开个灯都不行。
+     * 非设备家具在锁定态完全不拦事件 (保持原来 pointerEvents='none' 的手感)。
+     */
+    if (interiorLocked) {
+      if (data.device) {
+        e.stopPropagation();
+        selectDevice(data.id);
+      }
+      return;
+    }
     e.stopPropagation();
-    if (interiorLocked) return;
 
     // 遮挡仲裁: 射线最先打到的未必是用户想选的那件 (墙外邻房家具挡在前面)
     const pick = resolvePick(e.clientX, e.clientY, e, data.id);
@@ -234,6 +253,8 @@ function FurnitureItem({ data, roomId }: { data: Furniture; roomId: string }) {
     if (!target) return;
 
     selectFurniture(target.id);
+    // 设备类家具: 点击同时调出控制面板 (见 Viewport 的 DevicePanel)
+    selectDevice(target.device ? target.id : null);
     // 左键按下即进入"移动"会话: 拖动时由 FurnitureTransformController 的 ghost 本体
     // 实时跟随指针 (直接写 three 对象, 不经过 React), 松手才落位 —— 只产生一条历史。
     // 内嵌件 (灶台/水槽嵌在台面里) 不参与移动: 其占地本就落在母体柜内, 一动必判重叠。
@@ -244,7 +265,14 @@ function FurnitureItem({ data, roomId }: { data: Furniture; roomId: string }) {
   };
 
   const handlePointerOver = (e: any) => {
-    if (interiorLocked) return;
+    if (interiorLocked) {
+      // 锁定态下只有设备有"可点击"提示
+      if (data.device) {
+        e.stopPropagation();
+        document.body.style.cursor = 'pointer';
+      }
+      return;
+    }
     e.stopPropagation();
     document.body.style.cursor = 'pointer';
   };
@@ -381,6 +409,10 @@ export function FurnitureContent({ data }: { data: Furniture }) {
       return <Toilet data={data} />;
     case 'stove':
       return <Stove data={data} />;
+    case 'ac':
+      return <AirConditioner data={data} />;
+    case 'curtain':
+      return <Curtain data={data} />;
     case 'decor':
     default:
       return <Decor data={data} />;

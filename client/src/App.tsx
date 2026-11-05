@@ -7,6 +7,7 @@ import { Login } from './components/auth/Login';
 import { Home } from './components/home/Home';
 import { ModelManagement } from './components/model/ModelManagement';
 import { CampusManagement } from './components/model/CampusManagement';
+import { SceneViewer } from './components/viewer/SceneViewer';
 import { useAppStore } from './store/useAppStore';
 import { getModelById } from './api/mockApi';
 import { ThumbnailCaptureHost } from './utils/thumbnailCapture';
@@ -189,6 +190,8 @@ function App() {
       {/* 全局缩略图捕获宿主: 所有素材/模型缩略图共用一个隐藏 Canvas 离线渲染, 避免多 WebGL context */}
       <ThumbnailCaptureHost />
       <Routes>
+        {/* 独立运行器: 不进登录墙 —— 模型要在展厅大屏 / 面板 iframe 里被随便打开 */}
+        <Route path="/view" element={<SceneViewer />} />
         <Route path="/login" element={isLoggedIn ? <Navigate to="/home" replace /> : <Login />} />
         <Route
           path="/home"

@@ -13,6 +13,8 @@ import type {
   OutdoorSceneData,
   GroundItem,
   OutdoorObject,
+  DeviceKind,
+  DeviceState,
 } from '../types';
 import { mockSceneData, getSceneForModel } from '../data/mockScene';
 import { demoOutdoorScene, getOutdoorSceneForModel } from '../data/outdoorScene';
@@ -40,6 +42,16 @@ interface AppState {
   designerMode: DesignerMode;
   setDesignerMode: (mode: DesignerMode) => void;
 
+  /**
+   * 运行态开关 (独立运行器 /view 使用)。
+   *
+   * 与设计器共用同一个 store, 但运行态下要关掉一切编辑能力:
+   * 不挂拖拽手柄 / 长度标签 / 就近工具条, 建筑不可点, 家具只保留"设备可点"。
+   * 编辑态默认 false, 所以设计器行为完全不受影响。
+   */
+  runtime: boolean;
+  setRuntime: (v: boolean) => void;
+
   // 模型层级 (室内: building/interior; 户外: ground/space)
   layers: ModelLayer[];
   toggleLayer: (id: string) => void;
@@ -53,6 +65,19 @@ interface AppState {
   //          bay:<roomId>:<bayId> | french:<roomId>:<fwId> | floor:room:<roomId>
   selectedStructureId: string | null;
   selectStructure: (id: string | null) => void;
+
+  // ===== 智能设备 =====
+  // 运行时状态, 键 = 家具 id 或吸顶灯 id (lamp:<roomId>:<index>)。
+  // 只存被用户改过的字段, 读取时按 DeviceKind 补默认值 → 无需在场景加载时预先注册。
+  devices: Record<string, Partial<DeviceState>>;
+  /** 正在控制面板里展示的设备 (与家具选中相互独立: 设备面板可以单独出现) */
+  selectedDeviceId: string | null;
+  selectDevice: (id: string | null) => void;
+  updateDevice: (id: string, patch: Partial<DeviceState>) => void;
+  /** 一键开/关 */
+  toggleDevice: (id: string) => void;
+  /** 场景切换 / 换模型时清空 (灯 id 会重排, 留着会串到别的房间) */
+  resetDevices: () => void;
 
   // 设计风格
   styles: DesignStyle[];
@@ -262,6 +287,31 @@ function spacesOf(scene: SceneData): Space[] {
   return scene.rooms.map((r, i) => ({ id: r.id, name: r.name, order: i + 1 }));
 }
 
+/**
+ * 设备默认状态。
+ * store.devices 只保存"被用户改过的字段", 渲染时用这里兜底 ——
+ * 这样新增 / 删除家具、切换户型都不需要预先注册设备, 也不会有残留状态。
+ */
+export const DEVICE_DEFAULTS: Record<DeviceKind, DeviceState> = {
+  // 灯默认"未额外点亮": 场景本身已有按照明模式的弱自发光, 开灯只是再加一档
+  light:   { on: false, brightness: 80, colorTemp: 3000, targetTemp: 24, acMode: 'cool', fanSpeed: 'auto', position: 100 },
+  ac:      { on: false, brightness: 80, colorTemp: 3000, targetTemp: 26, acMode: 'cool', fanSpeed: 'auto', position: 100 },
+  curtain: { on: true,  brightness: 80, colorTemp: 3000, targetTemp: 24, acMode: 'cool', fanSpeed: 'auto', position: 100 },
+  // 冰箱 on = 门开 (便于在 3D 里直观看到"打开冰箱")
+  fridge:  { on: false, brightness: 80, colorTemp: 3000, targetTemp: 4,  acMode: 'cool', fanSpeed: 'auto', position: 100 },
+  tv:      { on: false, brightness: 80, colorTemp: 3000, targetTemp: 24, acMode: 'cool', fanSpeed: 'auto', position: 100 },
+  washer:  { on: false, brightness: 80, colorTemp: 3000, targetTemp: 24, acMode: 'cool', fanSpeed: 'auto', position: 100 },
+};
+
+/** 合并默认值与用户改动 */
+export function resolveDeviceState(
+  devices: Record<string, Partial<DeviceState>>,
+  id: string,
+  kind: DeviceKind,
+): DeviceState {
+  return { ...DEVICE_DEFAULTS[kind], ...(devices[id] ?? {}) };
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   // 从 mockSceneData.rooms 动态拼装, 保持原有数组顺序作为 order
   spaces: mockSceneData.rooms.map((r, i) => ({ id: r.id, name: r.name, order: i + 1 })),
@@ -290,6 +340,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 
   designerMode: 'interior',
+  runtime: false,
+  setRuntime: (v) => set({ runtime: v }),
   // 切换设计器模式: 替换模型分层、重置风格、清空选中与历史
   // 历史栈是两种模式共用的, 模式切换后旧的撤销记录已无意义, 必须清空
   setDesignerMode: (mode) =>
@@ -355,6 +407,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedStructureId: id,
       selectedFurnitureId: id ? null : state.selectedFurnitureId,
     })),
+
+  // ===== 智能设备 =====
+  devices: {},
+  selectedDeviceId: null,
+  selectDevice: (id) => set({ selectedDeviceId: id }),
+  updateDevice: (id, patch) =>
+    set((state) => ({
+      devices: { ...state.devices, [id]: { ...(state.devices[id] ?? {}), ...patch } },
+    })),
+  toggleDevice: (id) =>
+    set((state) => {
+      // 需要知道 kind 才能取默认值 → 由调用方保证传入的是已知设备 id;
+      // 这里只翻转已有值, 没有记录时视为默认关 → 打开
+      const cur = state.devices[id]?.on;
+      return {
+        devices: { ...state.devices, [id]: { ...(state.devices[id] ?? {}), on: !(cur ?? false) } },
+      };
+    }),
+  resetDevices: () => set({ devices: {}, selectedDeviceId: null }),
 
   styles: [
     { id: 'base', code: 'BASE',      label: '基础空间',     color: '#f5f5f5' },
@@ -455,6 +526,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeSpaceId: null,
         selectedFurnitureId: null,
         selectedStructureId: null,
+        devices: {},
+        selectedDeviceId: null,
         isDirty: false,
         past: [],
         future: [],
@@ -471,6 +544,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeSpaceId: null,
       selectedFurnitureId: null,
       selectedStructureId: null,
+      devices: {},
+      selectedDeviceId: null,
       isDirty: false,
       past: [],
       future: [],

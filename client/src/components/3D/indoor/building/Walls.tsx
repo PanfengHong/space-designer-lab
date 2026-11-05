@@ -3,6 +3,7 @@ import { useThree } from '@react-three/fiber';
 import type { WallSegment } from '../../../../types';
 import { useAppStore } from '../../../../store/useAppStore';
 import { wallDragLive } from '../../../../utils/hudAnchor';
+import { roomBounds } from '../../../../utils/roomBounds';
 import { PICK_FURNITURE } from '../../../../utils/pickTags';
 import * as THREE from 'three';
 
@@ -462,19 +463,13 @@ export function Walls({
       {/* 天花板 - 覆盖整个房间的面板 */}
       {showCeiling && (
         (() => {
-          let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-          for (const seg of segments) {
-            minX = Math.min(minX, seg.start[0], seg.end[0]);
-            maxX = Math.max(maxX, seg.start[0], seg.end[0]);
-            minZ = Math.min(minZ, seg.start[1], seg.end[1]);
-            maxZ = Math.max(maxZ, seg.start[1], seg.end[1]);
-          }
-          const width = maxX - minX + thickness;
-          const depth = maxZ - minZ + thickness;
-          const cx = (minX + maxX) / 2;
-          const cz = (minZ + maxZ) / 2;
+          // 用与吸顶灯定位相同的包围盒口径 (忽略开放口段), 保证灯落在天花板中心
+          const b = roomBounds(segments);
+          if (!b) return null;
+          const width = b.width + thickness;
+          const depth = b.depth + thickness;
           return (
-            <mesh position={[cx, height, cz]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+            <mesh position={[b.cx, height, b.cz]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
               <planeGeometry args={[width, depth]} />
               <meshStandardMaterial
                 color="#f0ece4"

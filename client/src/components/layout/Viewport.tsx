@@ -9,6 +9,7 @@ import {
   Copy,
   Trash2,
   Lock,
+  Power,
 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
@@ -21,6 +22,7 @@ import { OUTDOOR_STYLE_OPTIONS } from '../../constants/outdoorStyles';
 import { useDesignerShortcuts } from '../../hooks/useDesignerShortcuts';
 import { PerformanceMonitor } from '../panel/PerformanceMonitor';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { DevicePanel } from '../ui/DevicePanel';
 import { Toolbar, UndoRedoButtons } from './Toolbar';
 import { ExportModelButton } from './ExportPanel';
 import {
@@ -51,6 +53,16 @@ const OBJECT_TYPE_LABEL: Record<string, string> = {
   warehouse: '厂房仓库',
   car: '轿车',
   truck: '卡车',
+};
+
+/** 设备类型中文名 (家具属性面板里的"设备控制"按钮用) */
+const DEVICE_KIND_LABEL: Record<string, string> = {
+  light: '灯光',
+  ac: '空调',
+  curtain: '窗帘',
+  fridge: '冰箱',
+  tv: '电视',
+  washer: '洗衣机',
 };
 
 /**
@@ -256,6 +268,8 @@ function ViewportPanelColumn({
         </>
       ) : (
         <>
+          {/* 设备控制面板: 点击场景里的灯 / 空调 / 窗帘 / 冰箱 / 电视后出现 */}
+          <DevicePanel />
           <FurniturePanel />
           <StructurePanel />
         </>
@@ -384,6 +398,7 @@ function FurniturePanel() {
   const selectedFurnitureId = useAppStore((s) => s.selectedFurnitureId);
   const sceneData = useAppStore((s) => s.sceneData);
   const selectFurniture = useAppStore((s) => s.selectFurniture);
+  const selectDevice = useAppStore((s) => s.selectDevice);
   const updateFurniture = useAppStore((s) => s.updateFurniture);
   const removeFurniture = useAppStore((s) => s.removeFurniture);
   const requestDeleteConfirm = useAppStore((s) => s.requestDeleteConfirm);
@@ -396,6 +411,15 @@ function FurniturePanel() {
 
   return (
     <PropertyCard title="家具属性" onClose={() => selectFurniture(null)}>
+      {/* 带设备身份的家具: 给一个入口, 避免在 3D 里点不中设备时无从操作 */}
+      {item.device && (
+        <button
+          onClick={() => selectDevice(item.id)}
+          className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] text-white bg-gray-900 hover:bg-gray-800 rounded-md transition-colors"
+        >
+          <Power size={12} /> 设备控制 · {DEVICE_KIND_LABEL[item.device.kind] ?? '设备'}
+        </button>
+      )}
       <PropRow label="名称" value={item.name} />
       <PropRow label="类型" value={item.type} />
 

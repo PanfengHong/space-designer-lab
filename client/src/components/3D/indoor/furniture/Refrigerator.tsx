@@ -1,6 +1,7 @@
 import type { Furniture } from '../../../../types';
 import * as THREE from 'three';
 import { useStylePalette } from '../../../../constants/styles';
+import { useDeviceState } from '../../../../hooks/useDeviceState';
 
 interface Props {
   data: Furniture;
@@ -10,9 +11,13 @@ interface Props {
  * 冰箱 — 主体 + 上下双门 + 把手 + 散热栅格
  * size: [width(z), height(y), depth(x)]
  * rotation=0 时正面朝 +X
+ *
+ * 设备状态: on = 冷藏室门打开 (铰链在门左侧, 绕 Y 轴向外翻), 同时内部照明亮起
  */
 export function Refrigerator({ data }: Props) {
   const p = useStylePalette();
+  const state = useDeviceState(data.id, data.device);
+  const doorOpen = !!state?.on;
   const [w, h, d] = data.size;
   const bodyColor = p.appliance;
   const doorColor = p.appliance;
@@ -78,20 +83,38 @@ export function Refrigerator({ data }: Props) {
         <lineBasicMaterial color={p.metal} />
       </lineSegments>
 
-      {/* 下门 — 冷藏室 */}
-      <mesh position={[doorFrontX, topGap + freezerH + doorGap + fridgeH / 2, 0]} castShadow>
-        <boxGeometry args={[doorThick, fridgeH - doorGap, doorW]} />
-        <meshStandardMaterial
-          color={doorColor}
-          roughness={0.3}
-          metalness={0.6}
-        />
-      </mesh>
-      {/* 下门边缘 */}
-      <lineSegments position={[doorFrontX, topGap + freezerH + doorGap + fridgeH / 2, 0]}>
-        <edgesGeometry args={[new THREE.BoxGeometry(doorThick, fridgeH - doorGap, doorW)]} />
-        <lineBasicMaterial color={p.metal} />
-      </lineSegments>
+      {/* 下门 — 冷藏室 (铰链在左侧, 开门时向外翻) */}
+      <group
+        position={[doorFrontX, topGap + freezerH + doorGap + fridgeH / 2, -doorW / 2]}
+        rotation={[0, doorOpen ? 1.15 : 0, 0]}
+      >
+        <mesh position={[0, 0, doorW / 2]} castShadow>
+          <boxGeometry args={[doorThick, fridgeH - doorGap, doorW]} />
+          <meshStandardMaterial
+            color={doorColor}
+            roughness={0.3}
+            metalness={0.6}
+          />
+        </mesh>
+        {/* 下门边缘 */}
+        <lineSegments position={[0, 0, doorW / 2]}>
+          <edgesGeometry args={[new THREE.BoxGeometry(doorThick, fridgeH - doorGap, doorW)]} />
+          <lineBasicMaterial color={p.metal} />
+        </lineSegments>
+        {/* 下门把手 — 竖条 (更长), 相对门组原点 (z = -doorW/2) 偏移 */}
+        <mesh position={[doorThick / 2 + handleD / 2, 0, doorW * 0.35 + doorW / 2]} castShadow>
+          <boxGeometry args={[handleD, handleH * 1.2, handleW]} />
+          <meshStandardMaterial color={handleColor} metalness={0.8} roughness={0.25} />
+        </mesh>
+      </group>
+
+      {/* 冷藏室内部照明 — 门开时亮起 */}
+      {doorOpen && (
+        <mesh position={[d / 2 - 0.004, topGap + freezerH + doorGap + fridgeH / 2, 0]}>
+          <planeGeometry args={[fridgeH - doorGap, doorW * 0.98]} />
+          <meshBasicMaterial color="#fff4d6" transparent opacity={0.85} side={THREE.DoubleSide} />
+        </mesh>
+      )}
 
       {/* 门缝分隔线 */}
       <mesh position={[doorFrontX, topGap + freezerH + doorGap / 2, 0]}>
@@ -102,12 +125,6 @@ export function Refrigerator({ data }: Props) {
       {/* 上门把手 — 竖条 */}
       <mesh position={[doorFrontX + doorThick / 2 + handleD / 2, topGap + freezerH * 0.5, doorW * 0.35]} castShadow>
         <boxGeometry args={[handleD, handleH * 0.6, handleW]} />
-        <meshStandardMaterial color={handleColor} metalness={0.8} roughness={0.25} />
-      </mesh>
-
-      {/* 下门把手 — 竖条 (更长) */}
-      <mesh position={[doorFrontX + doorThick / 2 + handleD / 2, topGap + freezerH + doorGap + fridgeH * 0.5, doorW * 0.35]} castShadow>
-        <boxGeometry args={[handleD, handleH * 1.2, handleW]} />
         <meshStandardMaterial color={handleColor} metalness={0.8} roughness={0.25} />
       </mesh>
 

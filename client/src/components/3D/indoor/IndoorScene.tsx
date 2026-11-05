@@ -4,6 +4,7 @@ import { Text, Line } from '@react-three/drei';
 import { useShallow } from 'zustand/react/shallow';
 import * as THREE from 'three';
 import { Building } from './Building';
+import { RoomCeilingLights } from './building/CeilingLight';
 import { FurnitureGroup } from './Furniture';
 import { FurnitureTransformController } from './FurnitureTransform';
 import { FurnitureToolbar, HudAnchorReporter } from './FurnitureToolbar';
@@ -14,6 +15,7 @@ import { useStylePalette } from '../../../constants/styles';
 import { findRoomAt } from '../../../utils/r3fBridge';
 import { buildIndoorColliders, checkIndoorPlacement, type IndoorColliders } from '../../../utils/collision';
 import { resolveStructureDrop, structureGhostSize } from '../../../utils/structurePlacement';
+import { inferDevice } from '../../../utils/device';
 import { BaseScene } from '../engine/BaseScene';
 import type { ViewMode, CameraPreset, LightingModeConfig, GridConfig, WalkPoint } from '../engine/types';
 import type { ModelLayer, Furniture } from '../../../types';
@@ -55,10 +57,14 @@ interface SceneContentProps {
   showDoorsOpen: boolean;
   showSpaceName: boolean;
   showTrafficLines: boolean;
+  /** 室内照明模式 (自然光 / 人造光 / 阴天 / 夜景 / 黄昏) — 决定吸顶灯是否点亮 */
+  lighting: string;
   layers: ModelLayer[];
   monochrome: boolean;
   /** 占位碰撞体, 由 Scene 统一构建后下发, 避免重复计算 */
   colliders: IndoorColliders;
+  /** 运行态: 关掉所有编辑 affordance (拖拽手柄 / 长度标签 / 结构拾取) */
+  runtime: boolean;
 }
 
 /**
@@ -319,19 +325,23 @@ const INDOOR_CAMERA_PRESETS: Record<ViewMode, CameraPreset> = {
 };
 
 const INDOOR_LIGHTING_CONFIGS: Record<string, LightingModeConfig> = {
-  自然光: { ambient: 0.38, ambientColor: '#f4f1ea', dirIntensity: 1.5, dirColor: '#fff5e2', dirPos: [12, 18, 8], dir2Intensity: 0.45, dir2Color: '#e2ecf5', dir2Pos: [-8, 12, -6], hemiSky: '#dfeaf4', hemiGround: '#e8e2d6', hemiIntensity: 0.65, pointLights: [], fog: null },
-  人造光: { ambient: 0.25, ambientColor: '#fff5e6', dirIntensity: 0.05, dirColor: '#ffffff', dirPos: [10, 15, 10], dir2Intensity: 0, hemiSky: '#3a3a3a', hemiGround: '#2a2a2a', hemiIntensity: 0.15, pointLights: [
-    { pos: [CENTER_X + 2, 2.4, CENTER_Z + 2], color: '#ffe8cc', intensity: 0.6, dist: 6 },
-    { pos: [CENTER_X - 2, 2.4, CENTER_Z - 2], color: '#ffe8cc', intensity: 0.6, dist: 6 },
-    { pos: [CENTER_X + 2, 2.4, CENTER_Z - 2], color: '#ffe8cc', intensity: 0.5, dist: 6 },
-    { pos: [CENTER_X - 2, 2.4, CENTER_Z + 2], color: '#ffe8cc', intensity: 0.5, dist: 6 },
-  ], fog: null },
-  阴天:   { ambient: 0.6, ambientColor: '#d0d4d8', dirIntensity: 0.2, dirColor: '#c8cdd2', dirPos: [0, 20, 5], dir2Intensity: 0.15, hemiSky: '#b8bcc0', hemiGround: '#a0a4a8', hemiIntensity: 0.7, pointLights: [], fog: null },
-  夜景:   { ambient: 0.18, ambientColor: '#3a4868', dirIntensity: 0.35, dirColor: '#c8d8f0', dirPos: [-8, 20, 6], dir2Intensity: 0, hemiSky: '#1a2a48', hemiGround: '#0e1428', hemiIntensity: 0.3, pointLights: [
-    { pos: [CENTER_X + 2, 2.4, CENTER_Z + 2], color: '#ffe8cc', intensity: 0.5, dist: 6 },
-    { pos: [CENTER_X - 2, 2.4, CENTER_Z - 2], color: '#ffe8cc', intensity: 0.5, dist: 6 },
-  ], fog: [30, '#1a2030'] },
-  黄昏:   { ambient: 0.28, ambientColor: '#d8c8b8', dirIntensity: 1.0, dirColor: '#ffa060', dirPos: [12, 3.5, 8], dir2Intensity: 0.3, dir2Color: '#a8c0d8', dir2Pos: [-8, 12, -6], hemiSky: '#c8a890', hemiGround: '#5a4530', hemiIntensity: 0.45, pointLights: [], fog: [40, '#9a8068'] },
+  // 自然光照: 阳光是主光 (约 50° 斜射, 从窗侧照进房间, 地面上留下墙体/家具投影),
+  //   ambient / hemi / IBL 只做补光 —— 补光一高, 方向感就被冲平, 画面发白
+  自然光照: { ambient: 0.08, ambientColor: '#e6edf6', dirIntensity: 2.3, dirColor: '#ffe6b8', dirPos: [13, 16, 10], dir2Intensity: 0.14, dir2Color: '#cfe0f2', dir2Pos: [-9, 8, -7], hemiSky: '#d3e4f5', hemiGround: '#c8c0b0', hemiIntensity: 0.22, pointLights: [], fog: null, envIntensity: 0.2, shadowCameraRange: 20 },
+  人造光: { ambient: 0.1, ambientColor: '#ffe9cc', dirIntensity: 0.03, dirColor: '#ffffff', dirPos: [10, 15, 10], dir2Intensity: 0, hemiSky: '#2e2e33', hemiGround: '#232326', hemiIntensity: 0.08, pointLights: [
+    { pos: [CENTER_X + 2, 2.4, CENTER_Z + 2], color: '#ffe8cc', intensity: 2.2, dist: 10 },
+    { pos: [CENTER_X - 2, 2.4, CENTER_Z - 2], color: '#ffe8cc', intensity: 2.2, dist: 10 },
+    { pos: [CENTER_X + 2, 2.4, CENTER_Z - 2], color: '#ffe8cc', intensity: 1.9, dist: 10 },
+    { pos: [CENTER_X - 2, 2.4, CENTER_Z + 2], color: '#ffe8cc', intensity: 1.9, dist: 10 },
+  ], fog: null, envIntensity: 0.1 },
+  // 阴天: 唯一应该"平"的模式 —— 天空漫射为主, 没有明确投影
+  阴天:   { ambient: 0.28, ambientColor: '#d3d8dd', dirIntensity: 0.25, dirColor: '#c8cdd2', dirPos: [0, 20, 5], dir2Intensity: 0.1, hemiSky: '#b8bcc0', hemiGround: '#a0a4a8', hemiIntensity: 0.55, pointLights: [], fog: null, envIntensity: 0.7 },
+  // 夜景: 房间整体压黑, 光只来自"真实光源" —
+  //   dir  = 月光 (冷蓝、斜射, 透过剖切/窗口在地面投出光斑与阴影)
+  //   dir2 = 地面/物件的一次反射补光 (极弱, 让黑部不至于死黑)
+  //   IBL 几乎关掉。吸顶灯不强制点亮, 进入夜景时也会把已开的灯全部关掉
+  夜景:   { ambient: 0.09, ambientColor: '#1a2742', dirIntensity: 2.4, dirColor: '#a8c4ec', dirPos: [-5, 16, -3.5], dir2Intensity: 0.14, dir2Color: '#3b5a86', dir2Pos: [9, 4, 10], hemiSky: '#12203a', hemiGround: '#22334f', hemiIntensity: 0.45, pointLights: [], fog: [40, '#0a0f19'], envIntensity: 0.04, shadowCameraRange: 20 },
+  黄昏:   { ambient: 0.12, ambientColor: '#d8c8b8', dirIntensity: 1.8, dirColor: '#ff9a52', dirPos: [16, 4.5, 10], dir2Intensity: 0.16, dir2Color: '#8aa8c8', dir2Pos: [-9, 8, -7], hemiSky: '#c8a890', hemiGround: '#5a4530', hemiIntensity: 0.3, pointLights: [], fog: [40, '#9a8068'], envIntensity: 0.25, shadowCameraRange: 20 },
 };
 
 const INDOOR_GRID_CONFIG: GridConfig = {
@@ -354,16 +364,19 @@ function SceneContent({
   showDoorsOpen,
   showSpaceName,
   showTrafficLines,
+  lighting,
   layers,
   monochrome,
   colliders,
+  runtime,
 }: SceneContentProps) {
   const sceneData = useAppStore((s) => s.sceneData);
   const wallThickness = sceneData.wallThickness;
   const ceilingHeight = sceneData.ceilingHeight;
   const floorThickness = sceneData.floorThickness;
-  const buildingLocked = layers.find((l) => l.id === 'building')?.locked ?? false;
-  const interiorLocked = layers.find((l) => l.id === 'interior')?.locked ?? false;
+  const buildingLocked = runtime || (layers.find((l) => l.id === 'building')?.locked ?? false);
+  // 室内层锁定不再用 pointerEvents 整组禁用: 锁定时仍要能点开设备面板,
+  // 编辑行为由 FurnitureItem 内部按 interiorLocked 拦截
   const p = useStylePalette();
   const walkthroughIndex = useAppStore((s) => s.walkthroughIndex);
   const setWalkthroughIndex = useAppStore((s) => s.setWalkthroughIndex);
@@ -382,17 +395,35 @@ function SceneContent({
   const floorColor = monochrome ? '#ffffff' : p.floor;
 
   const isWalkthrough = viewMode === 'walkthrough';
+  // 人造光: 吸顶灯全亮。自然光/夜景不点灯 —— 夜景只有月光, 灯罩保持熄灭 (自发光 0)
+  const lampLit = lighting === '人造光';
+  const lampGlow = lampLit ? 1 : lighting === '夜景' ? 0 : 0.45;
+  const updateDevice = useAppStore((s) => s.updateDevice);
+
+  // 切到夜景 = 关掉所有已开的设备灯 (只清 on, 不动温度/开合等参数),
+  // 房间只留月光。切回来不自动开灯, 由用户自己点。
+  useEffect(() => {
+    if (lighting !== '夜景') return;
+    const devices = useAppStore.getState().devices;
+    Object.keys(devices).forEach((id) => {
+      if (devices[id]?.on) updateDevice(id, { on: false });
+    });
+  }, [lighting, updateDevice]);
 
   return (
     <>
-      <R3FBridgeBinder />
-      <SpaceFocusController viewMode={viewMode} activeSpaceId={activeSpaceId} />
-
-      {/* 选中家具的拖拽移动 / 旋转手柄 + 就近工具条锚点 */}
-      <FurnitureTransformController colliders={colliders} />
-      <HudAnchorReporter />
-      {/* 墙体端点拖拽时的实时长度标签 (每帧直写 DOM, 不走 React) */}
-      <WallLengthReporter />
+      {/* 运行态不挂任何编辑辅助: 拖拽桥 / 变换手柄 / 工具条锚点 / 墙长标签 */}
+      {!runtime && (
+        <>
+          <R3FBridgeBinder />
+          <SpaceFocusController viewMode={viewMode} activeSpaceId={activeSpaceId} />
+          {/* 选中家具的拖拽移动 / 旋转手柄 + 就近工具条锚点 */}
+          <FurnitureTransformController colliders={colliders} />
+          <HudAnchorReporter />
+          {/* 墙体端点拖拽时的实时长度标签 (每帧直写 DOM, 不走 React) */}
+          <WallLengthReporter />
+        </>
+      )}
 
       {isWalkthrough && (
         <WalkthroughLook walkthroughIndex={walkthroughIndex} setWalkthroughIndex={setWalkthroughIndex} activeSpaceId={activeSpaceId} />
@@ -425,10 +456,18 @@ function SceneContent({
               monochrome={monochrome}
             />
           </group>
-          {/* 室内设计层 — 锁定时不可选中 */}
+          {/* 吸顶灯 — 独立于建筑结构层渲染, 层锁定时依然点得开设备面板 */}
+          <RoomCeilingLights
+            room={room}
+            ceilingHeight={ceilingHeight}
+            cutHeight={viewMode === 'plan' ? 0.01 : wallCutHeight}
+            baseIntensity={lampGlow}
+            monochrome={monochrome}
+          />
+          {/* 室内设计层 — 锁定时不可编辑, 但设备仍可点击控制 (见 FurnitureItem) */}
           {/* @ts-ignore pointerEvents 是 R3F 运行时支持的属性 */}
-          <group pointerEvents={interiorLocked ? 'none' : 'auto'}>
-            <FurnitureGroup items={room.furniture} roomId={room.id} />
+          <group pointerEvents="auto">
+            <FurnitureGroup items={room.furniture} roomId={room.id} readOnly={runtime} />
           </group>
           {showSpaceName && (
             <Text
@@ -470,7 +509,7 @@ function SceneContent({
   );
 }
 
-export function Scene() {
+export function Scene({ runtime = false }: { runtime?: boolean } = {}) {
   // 按字段订阅, 避免拖拽等高频 store 更新触发整个场景树重渲染 (导致高亮框跟不上鼠标)
   const {
     viewMode,
@@ -481,6 +520,7 @@ export function Scene() {
     resetCamera,
     selectFurniture,
     selectStructure,
+    selectDevice,
     sceneData,
     draggingFurniture,
     setDraggingFurniture,
@@ -497,6 +537,7 @@ export function Scene() {
     resetCamera: s.resetCamera,
     selectFurniture: s.selectFurniture,
     selectStructure: s.selectStructure,
+    selectDevice: s.selectDevice,
     sceneData: s.sceneData,
     draggingFurniture: s.draggingFurniture,
     setDraggingFurniture: s.setDraggingFurniture,
@@ -511,10 +552,10 @@ export function Scene() {
   const bgColor = useMemo(() => {
     if (renderMode === 'arctic') return '#e8e8e8';
     switch (viewSettings.lighting) {
-      case '夜景': return '#1a2030';
+      case '夜景': return '#0b111e';
       case '黄昏': return '#6a5040';
       case '阴天': return '#cfd4d8';
-      default: return '#eef0f1';
+      default: return '#e2e7ec';
     }
   }, [renderMode, viewSettings.lighting]);
 
@@ -580,6 +621,8 @@ export function Scene() {
         size: draggingFurniture.size,
         type: draggingFurniture.type,
         color: draggingFurniture.color,
+        // 拖入即带设备身份 (空调/窗帘/冰箱/电视/落地灯), 之后点击就能调出控制面板
+        device: inferDevice(draggingFurniture.type, draggingFurniture.size),
       };
       addFurniture(roomId, newFurniture);
     }
@@ -593,16 +636,27 @@ export function Scene() {
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <BaseScene
         center={[CENTER_X, 0, CENTER_Z]}
-        onPointerMissed={() => { selectFurniture(null); selectStructure(null); }}
+        onPointerMissed={() => {
+          selectFurniture(null);
+          if (runtime) {
+            selectDevice(null);
+            return;
+          }
+          selectStructure(null);
+          selectDevice(null);
+        }}
         viewMode={viewMode as ViewMode}
         resetCamera={resetCamera}
         cameraPresets={INDOOR_CAMERA_PRESETS}
         walkPoints={INDOOR_WALK_POINTS}
         lighting={viewSettings.lighting}
         lightingConfigs={INDOOR_LIGHTING_CONFIGS}
+        /* 室内关掉 PCSS 软阴影: 默认 8 采样在低角度阳光的大斜面上会抖出密集噪点,
+           看起来像蒙了层灰白脏点。改用高分辨率 PCF, 投影边界干净, 更像真实日照 */
+        softShadow={false}
         grid={INDOOR_GRID_CONFIG}
         background={bgColor}
-        enableDrag
+        enableDrag={!runtime}
         dragSize={dragGhost.size}
         dragOffset={dragGhost.offset}
         dragValidatorDetailed={dragValidatorDetailed}
@@ -616,15 +670,21 @@ export function Scene() {
           showDoorsOpen={viewSettings.showDoorsOpen}
           showSpaceName={viewSettings.showSpaceName}
           showTrafficLines={viewSettings.showTrafficLines}
+          lighting={viewSettings.lighting}
           layers={layers}
           monochrome={monochrome}
           colliders={colliders}
+          runtime={runtime}
         />
       </BaseScene>
-      {/* 就近工具条: 悬浮于选中家具上方, 位置由 HudAnchorReporter 每帧投影写入 */}
-      <FurnitureToolbar />
-      {/* 墙体端点拖拽时的实时长度标签 */}
-      <WallLengthHud />
+      {!runtime && (
+        <>
+          {/* 就近工具条: 悬浮于选中家具上方, 位置由 HudAnchorReporter 每帧投影写入 */}
+          <FurnitureToolbar />
+          {/* 墙体端点拖拽时的实时长度标签 */}
+          <WallLengthHud />
+        </>
+      )}
     </div>
   );
 }

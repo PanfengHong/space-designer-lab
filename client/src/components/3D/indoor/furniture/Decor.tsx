@@ -1,5 +1,6 @@
 import type { Furniture } from '../../../../types';
 import { useStylePalette } from '../../../../constants/styles';
+import { useDeviceState } from '../../../../hooks/useDeviceState';
 
 interface Props {
   data: Furniture;
@@ -10,6 +11,7 @@ interface Props {
  */
 export function Decor({ data }: Props) {
   const p = useStylePalette();
+  const state = useDeviceState(data.id, data.device);
   const [w, h, d] = data.size;
   const color = p.wood;
 
@@ -45,11 +47,25 @@ export function Decor({ data }: Props) {
           <cylinderGeometry args={[0.02, 0.02, h - 0.06, 16]} />
           <meshStandardMaterial color={color} roughness={0.3} metalness={0.7} />
         </mesh>
-        {/* 灯罩 */}
+        {/* 灯罩 — 带 device 时随开关发光 */}
         <mesh position={[0, h - 0.06 + h * 0.1, 0]} castShadow>
           <cylinderGeometry args={[0.18, 0.12, h * 0.2, 24]} />
-          <meshStandardMaterial color={p.fabricLight} roughness={0.9} />
+          <meshStandardMaterial
+            color={p.fabricLight}
+            roughness={0.9}
+            emissive={state?.on ? '#ffe6b8' : '#000000'}
+            emissiveIntensity={state?.on ? 0.4 + (state.brightness / 100) * 1.1 : 0}
+          />
         </mesh>
+        {state?.on && (
+          <pointLight
+            position={[0, h - 0.1, 0]}
+            color={state.colorTemp >= 4500 ? '#eaf2ff' : '#ffd9a3'}
+            intensity={0.25 + (state.brightness / 100) * 0.4}
+            distance={3.2}
+            decay={2}
+          />
+        )}
       </group>
     );
   }

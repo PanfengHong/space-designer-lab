@@ -17,6 +17,8 @@ import { Sink } from '../3D/indoor/furniture/Sink';
 import { Shower } from '../3D/indoor/furniture/Shower';
 import { Stove } from '../3D/indoor/furniture/Stove';
 import { Decor } from '../3D/indoor/furniture/Decor';
+import { AirConditioner } from '../3D/indoor/furniture/AirConditioner';
+import { Curtain } from '../3D/indoor/furniture/Curtain';
 
 /**
  * 家具素材库 — 2 列网格 + 缩略图
@@ -50,6 +52,8 @@ const CATALOG: CatalogItem[] = [
   { type: 'sink', name: '洗手台', size: [0.7, 0.85, 0.5], color: '#ffffff' },
   { type: 'stove', name: '灶台', size: [0.8, 0.08, 0.5], color: '#1a1a1a' },
   { type: 'decor', name: '落地灯', size: [0.4, 1.6, 0.4], color: '#e8e0d4' },
+  { type: 'ac', name: '空调', size: [0.95, 0.3, 0.22], color: '#ffffff' },
+  { type: 'curtain', name: '窗帘', size: [2.4, 2.5, 0.1], color: '#efe7da' },
 ];
 
 /** 办公空间素材库 (复用已有家具类型, 不新增 3D 组件) */
@@ -81,6 +85,8 @@ function renderCatalogFurniture(data: Furniture) {
     case 'sink': return <Sink data={data} />;
     case 'shower': return <Shower data={data} />;
     case 'stove': return <Stove data={data} />;
+    case 'ac': return <AirConditioner data={data} />;
+    case 'curtain': return <Curtain data={data} />;
     case 'decor': return <Decor data={data} />;
     default: return <Decor data={data} />;
   }
