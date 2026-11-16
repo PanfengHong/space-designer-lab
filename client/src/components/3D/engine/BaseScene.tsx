@@ -6,6 +6,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { screenToFloor, snapToGrid } from '../../../utils/r3fBridge';
 import { PerformanceProbe } from './PerformanceProbe';
 import { exportBridge, EXPORT_CONTENT_GROUP } from '../../../utils/exportBridge';
+import { CLAY_COLOR, CLAY_ROUGHNESS } from '../../../constants/renderMode';
 import type { RenderMode } from '../../../types';
 import type {
   BaseSceneProps,
@@ -17,9 +18,6 @@ import type {
 } from './types';
 
 /* ==================== 渲染模式 (ARCTIC 素模 / SHADED 着色 / MATERIAL 材质) ==================== */
-
-/** 素模粘土材质色 (微暖白, 比纯白更有石膏感) */
-const CLAY_COLOR = '#f2f1ee';
 
 /** 被替换前的原始材质状态 (切换模式后可完整还原) */
 interface OriginalMaterialState {
@@ -44,7 +42,7 @@ function RenderModeController() {
   modeRef.current = renderMode;
   const scanAccRef = useRef(0);
   const clayRef = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: CLAY_COLOR, roughness: 0.95, metalness: 0 }),
+    () => new THREE.MeshStandardMaterial({ color: CLAY_COLOR, roughness: CLAY_ROUGHNESS, metalness: 0 }),
     [],
   );
   useEffect(() => () => clayRef.dispose(), [clayRef]);
@@ -88,6 +86,9 @@ function RenderModeController() {
       if (!mat || Array.isArray(mesh.material)) return;
       if (!(mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial)) return;
       if (mat === clayRef || mat.transparent || mat.depthTest === false) return;
+      // 自带模式外观的网格 (地面: 木地板/地砖 ↔ 素模灰) 不参与这里的整体替换 ——
+      // 它自己订阅 renderMode 换材质, 免得在"换成粘土 / 还原"的来回里丢贴图
+      if (mesh.userData?.keepMaterial) return;
 
       if (mode === 'material') return;
 
@@ -427,11 +428,11 @@ function StudioEnvironment({ scale = 1 }: { scale?: number }) {
   return (
     <Environment resolution={64} frames={1}>
       {/* 顶部大面暖光 (主柔光) */}
-      <Lightformer intensity={1.4 * scale} position={[0, 6, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[12, 12, 1]} color="#fff4e2" />
+      <Lightformer intensity={1.4 * scale} position={[0, 6, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[12, 12, 1]} color="#f4f7fa" />
       {/* 左后冷补光 */}
       <Lightformer intensity={0.55 * scale} position={[-6, 2.5, -5]} rotation={[0, Math.PI / 4, 0]} scale={[7, 4, 1]} color="#dfe9f4" />
       {/* 右前暖补光 */}
-      <Lightformer intensity={0.45 * scale} position={[6, 2.5, 6]} rotation={[0, -Math.PI * 0.75, 0]} scale={[7, 4, 1]} color="#f3ede2" />
+      <Lightformer intensity={0.45 * scale} position={[6, 2.5, 6]} rotation={[0, -Math.PI * 0.75, 0]} scale={[7, 4, 1]} color="#eef1f5" />
       {/* 背面淡蓝环境 */}
       <Lightformer intensity={0.35 * scale} position={[0, 2, -8]} scale={[10, 4, 1]} color="#e8eef6" />
     </Environment>

@@ -18,6 +18,7 @@ import { OutdoorScene } from '../3D/outdoor/OutdoorScene';
 import { FloorPlan2D } from '../2D/FloorPlan2D';
 import { OutdoorPlan2D } from '../2D/OutdoorPlan2D';
 import { LIGHTING_OPTIONS, LIGHTING_ICONS } from '../../constants/lighting';
+import { FLOOR_MATERIALS, FLOOR_MATERIAL_ORDER, defaultFloorForRoom } from '../../data/floorMaterials';
 import { OUTDOOR_STYLE_OPTIONS } from '../../constants/outdoorStyles';
 import { useDesignerShortcuts } from '../../hooks/useDesignerShortcuts';
 import { PerformanceMonitor } from '../panel/PerformanceMonitor';
@@ -559,6 +560,9 @@ function resolveStructure(selector: string | null, sceneData: ReturnType<typeof 
         floorThickness: sceneData.floorThickness,
         floorHeight: room.floorHeight,
         ceilingHeight: sceneData.ceilingHeight,
+        // 未手动指定时按空间类型派生 (卧室木地板 / 厨卫地砖), 面板里如实标出来源
+        floorMaterial: room.floorMaterial ?? defaultFloorForRoom(room),
+        floorMaterialAuto: room.floorMaterial == null,
       } as Record<string, unknown>,
     };
   }
@@ -693,6 +697,59 @@ function StructurePanel() {
               max={4}
               onChange={(v) => updateStructure(selectedStructureId, { ceilingHeight: v })}
             />
+          </div>
+
+          {/* 地面材质 — 每间房各自一份, 未指定时按空间类型派生 */}
+          <div className="space-y-2 pt-1.5 border-t border-gray-100">
+            <div className="flex items-center gap-2">
+              <div className="text-[10px] text-gray-400 font-medium pt-1">地板材质</div>
+              {extra.floorMaterialAuto ? (
+                <span className="ml-auto text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                  按空间类型自动
+                </span>
+              ) : (
+                <button
+                  onClick={() => updateStructure(selectedStructureId, { floorMaterial: undefined })}
+                  className="ml-auto text-[9px] text-gray-400 hover:text-gray-600 transition-colors"
+                  title="清除手动指定, 恢复按空间类型匹配"
+                >
+                  恢复自动
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {FLOOR_MATERIAL_ORDER.map((mid) => {
+                const m = FLOOR_MATERIALS[mid];
+                const active = extra.floorMaterial === mid;
+                return (
+                  <button
+                    key={mid}
+                    onClick={() => updateStructure(selectedStructureId, { floorMaterial: mid })}
+                    title={`${m.label} · ${m.hint}`}
+                    className={`rounded-md border p-1 text-left transition-colors ${
+                      active
+                        ? 'border-emerald-400 bg-emerald-50/70'
+                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span
+                      className="block h-6 rounded-[3px] mb-1 border border-black/5"
+                      style={{ backgroundColor: m.swatch }}
+                    />
+                    <span
+                      className={`block text-[10px] leading-tight ${
+                        active ? 'text-emerald-700 font-medium' : 'text-gray-500'
+                      }`}
+                    >
+                      {m.short}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="text-[9px] text-gray-400 leading-relaxed">
+              {FLOOR_MATERIALS[extra.floorMaterial as keyof typeof FLOOR_MATERIALS]?.hint ?? ''}
+            </div>
           </div>
         </>
       )}

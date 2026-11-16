@@ -458,7 +458,7 @@ export const mockSceneData: SceneData = {
       walls: [
         { id: 'w-l1', start: [3.5, 5.5], end: [7.0, 5.5], height: 2.8, opening: true }, // 北墙(开放连通餐厅)
         // 东墙: 上段(面向玄关)完全开放, 下段(面向卧室B)实心
-        { id: 'w-l2a', start: [7.0, 2.2], end: [7.0, 6.5], height: 2.8, opening: true }, // 东墙(开放连通玄关)
+        { id: 'w-l2a', start: [7.0, 5.5], end: [7.0, 6.5], height: 2.8, opening: true }, // 东墙(开放连通玄关)
         { id: 'w-l2b', start: [7.0, 6.5], end: [7.0, 10.6], height: 2.8 }, // 东墙(下段, 实心面向卧室B)
         { id: 'w-l3', start: [7.0, 10.6], end: [3.5, 10.6], height: 2.8, opening: true }, // 南墙(落地窗隔断阳台)
         { id: 'w-l4', start: [3.5, 10.6], end: [3.5, 5.5], height: 2.8 }, // 西墙(与卧室C共享, 有门)

@@ -181,6 +181,15 @@ export interface SofaFurniture {
 // 家具/家电
 export type Furniture = BaseFurnitrue & ShowerFurniture & SofaFurniture;
 
+// 地面材质 (每种空间的默认材质见 data/floorMaterials.ts)
+export type FloorMaterialId =
+  | 'wood-oak'
+  | 'wood-walnut'
+  | 'tile-white'
+  | 'tile-gray'
+  | 'carpet'
+  | 'concrete';
+
 // 房间
 export interface Room {
   id: string;
@@ -195,6 +204,8 @@ export interface Room {
   frenchWindows?: FrenchWindow[];
   furniture: Furniture[];
   floorHeight: number;
+  /** 地面材质。未设置时按空间类型自动匹配 (卧室木地板 / 厨卫地砖) */
+  floorMaterial?: FloorMaterialId;
   stairs?: StairFlight[];
   elevators?: ElevatorDoorData[];
 }

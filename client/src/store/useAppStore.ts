@@ -712,11 +712,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => {
       const [type, roomId, id] = selector.split(':');
       const hist = snapshot(state);
-      // 地板: selector = `floor:${roomId}`, patch 可含 floorThickness/floorHeight/ceilingHeight
+      // 地板: selector = `floor:${roomId}`, patch 可含 floorThickness/floorHeight/ceilingHeight/floorMaterial
       if (type === 'floor') {
-        const nextRooms = state.sceneData.rooms.map((r) =>
-          r.id !== roomId ? r : { ...r, floorHeight: (patch.floorHeight as number) ?? r.floorHeight }
-        );
+        const nextRooms = state.sceneData.rooms.map((r) => {
+          if (r.id !== roomId) return r;
+          const next: typeof r = {
+            ...r,
+            floorHeight: (patch.floorHeight as number) ?? r.floorHeight,
+          };
+          // floorMaterial 显式传 undefined 表示"恢复按空间类型自动匹配", 所以用 in 判断
+          if ('floorMaterial' in patch) {
+            next.floorMaterial = patch.floorMaterial as typeof r.floorMaterial;
+          }
+          return next;
+        });
         const floorThickness = (patch.floorThickness as number) ?? state.sceneData.floorThickness;
         const ceilingHeight = (patch.ceilingHeight as number) ?? state.sceneData.ceilingHeight;
         return {

@@ -5,20 +5,10 @@ import {
   requestThumbnail,
   useThumbnailUrl,
 } from '../../utils/thumbnailCapture';
-import { Bed } from '../3D/indoor/furniture/Bed';
-import { Sofa } from '../3D/indoor/furniture/Sofa';
-import { Table } from '../3D/indoor/furniture/Table';
-import { Cabinet } from '../3D/indoor/furniture/Cabinet';
-import { Chair } from '../3D/indoor/furniture/Chair';
-import { Refrigerator } from '../3D/indoor/furniture/Refrigerator';
-import { WashingMachine } from '../3D/indoor/furniture/WashingMachine';
-import { Toilet } from '../3D/indoor/furniture/Toilet';
-import { Sink } from '../3D/indoor/furniture/Sink';
-import { Shower } from '../3D/indoor/furniture/Shower';
-import { Stove } from '../3D/indoor/furniture/Stove';
-import { Decor } from '../3D/indoor/furniture/Decor';
-import { AirConditioner } from '../3D/indoor/furniture/AirConditioner';
-import { Curtain } from '../3D/indoor/furniture/Curtain';
+import { footprintOf } from '../../data/furnitureMeta';
+import { FurnitureContent3D } from '../3D/indoor/furnitureRegistry';
+import { FurnitureSymbol2D } from '../2D/furnitureSymbol2D';
+import { setCustomDragImage } from './dragImage';
 
 /**
  * 家具素材库 — 2 列网格 + 缩略图
@@ -27,9 +17,13 @@ import { Curtain } from '../3D/indoor/furniture/Curtain';
  * 拖拽机制: HTML5 drag-and-drop
  * - onDragStart: 设置 store.draggingFurniture (模板数据) + 自定义透明拖拽影像
  * - Canvas 层 onDragOver/onDrop: raycast 计算地板位置并放置
+ * - 平面图模式下同样走这一套, 落点由 FloorPlan2D 的 dragOver/drop 接管
  *
  * 缩略图机制: 全局单个隐藏 Canvas 离线捕获 (见 utils/thumbnailCapture.tsx),
- * 不再为每个素材创建独立 WebGL context
+ * 不再为每个素材创建独立 WebGL context。
+ *
+ * 视角联动 (2026-11-16): 平面图模式下卡片改画**平面符号** (FurnitureSymbol2D),
+ * 与落到平面图里的图形同源, 也不再触发 3D 缩略图捕获 (省一次离屏渲染)。
  */
 
 interface CatalogItem {
@@ -72,24 +66,13 @@ const OFFICE_CATALOG: CatalogItem[] = [
   { type: 'toilet', name: '马桶', size: [0.4, 0.8, 0.65], color: '#fafafa' },
 ];
 
+/**
+ * 缩略图渲染 —— 与场景内家具走同一个注册表 (furnitureRegistry)。
+ * 之前这里有一份独立的 switch, 新增素材时两处必须手动同步, 漏改就会出现
+ * "缩略图和实物不是同一个东西"。
+ */
 function renderCatalogFurniture(data: Furniture) {
-  switch (data.type) {
-    case 'bed': return <Bed data={data} />;
-    case 'sofa': return <Sofa data={data} />;
-    case 'table': return <Table data={data} />;
-    case 'cabinet': return <Cabinet data={data} />;
-    case 'chair': return <Chair data={data} />;
-    case 'fridge': return <Refrigerator data={data} />;
-    case 'washer': return <WashingMachine data={data} />;
-    case 'toilet': return <Toilet data={data} />;
-    case 'sink': return <Sink data={data} />;
-    case 'shower': return <Shower data={data} />;
-    case 'stove': return <Stove data={data} />;
-    case 'ac': return <AirConditioner data={data} />;
-    case 'curtain': return <Curtain data={data} />;
-    case 'decor': return <Decor data={data} />;
-    default: return <Decor data={data} />;
-  }
+  return <FurnitureContent3D data={data} />;
 }
 
 /** 缩略图键: 类型 + 名称 (住宅/办公素材同名同型但尺寸不同, 需区分) */
@@ -148,24 +131,50 @@ function CatalogThumbnail({ item }: { item: CatalogItem }) {
 }
 
 /**
- * 从卡片 DOM 中取缩略图 <img> 作为自定义拖拽影像
- * 透明 PNG 只包含家具本体, 不带白色卡片背景
+ * 平面图模式下的素材卡预览 —— 直接渲染 2D 平面符号。
+ *
+ * 与落到平面图里的图形是同一个组件 (FurnitureSymbol2D), 所以"卡上看到的就是落下去的样子",
+ * 也顺带免掉了 3D 缩略图的离屏渲染开销。
  */
-function setCustomDragImage(e: React.DragEvent) {
-  const img = (e.currentTarget as HTMLElement).querySelector('img');
-  if (img && img.complete && img.naturalWidth > 0) {
-    try {
-      e.dataTransfer.setDragImage(img, Math.round(img.clientWidth / 2), Math.round(img.clientHeight / 2));
-    } catch {
-      // setDragImage 失败时回退浏览器默认快照
-    }
-  }
+function PlanSymbolPreview({ item }: { item: CatalogItem }) {
+  const furniture: Furniture = {
+    id: `plan-${item.type}-${item.name}`,
+    name: item.name,
+    position: [0, 0, 0],
+    rotation: 0,
+    size: item.size,
+    type: item.type,
+    color: item.color,
+  };
+  const { w, h } = footprintOf(furniture);
+  // 淋浴间是从锚点 (0,0) 向 +X/+Z 展开的图形, 画完再平移到中心
+  const isShower = item.type === 'shower';
+  const boxW = isShower ? item.size[0] : w;
+  const boxH = isShower ? item.size[0] : h;
+  const pad = Math.max(boxW, boxH) * 0.12 + 0.06;
+
+  return (
+    <svg
+      viewBox={`${-boxW / 2 - pad} ${-boxH / 2 - pad} ${boxW + pad * 2} ${boxH + pad * 2}`}
+      preserveAspectRatio="xMidYMid meet"
+      style={{ width: '100%', height: '100%', display: 'block' }}
+    >
+      <g transform={isShower ? `translate(${-boxW / 2}, ${-boxH / 2})` : undefined}>
+        <FurnitureSymbol2D furniture={furniture} />
+      </g>
+    </svg>
+  );
 }
 
+/**
+ * 从卡片 DOM 中取缩略图 <img> (平面图模式下取 <svg> 符号) 作为自定义拖拽影像。
+ * 透明 PNG 只包含家具本体, 不带白色卡片背景。
+ */
 export function FurnitureCatalog() {
   const setDraggingFurniture = useAppStore((s) => s.setDraggingFurniture);
   const setDraggingStructure = useAppStore((s) => s.setDraggingStructure);
   const activeModelItem = useAppStore((s) => s.activeModelItem);
+  const isPlan = useAppStore((s) => s.viewMode === 'plan');
 
   const isOffice = activeModelItem?.category === 'office';
   const catalog = isOffice ? OFFICE_CATALOG : CATALOG;
@@ -187,7 +196,11 @@ export function FurnitureCatalog() {
   return (
     <div className="p-2">
       <div className="text-[10px] text-gray-400 mb-2 px-1">
-        {isOffice ? '拖拽办公家具到设计区域放置' : '拖拽家具到设计区域放置'}
+        {isPlan
+          ? '拖拽家具到平面图上放置 · 自动贴墙对齐'
+          : isOffice
+            ? '拖拽办公家具到设计区域放置'
+            : '拖拽家具到设计区域放置'}
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         {catalog.map((item) => (
@@ -199,9 +212,9 @@ export function FurnitureCatalog() {
             className="flex flex-col bg-gray-50 hover:bg-gray-100 rounded-md cursor-grab active:cursor-grabbing transition-colors select-none overflow-hidden"
             title={`${item.name} ${item.size[0]}×${item.size[2]}m`}
           >
-            {/* 缩略图区 (透明 PNG, 无独立 WebGL context) */}
-            <div className="h-16 bg-gradient-to-br from-gray-50 to-gray-100">
-              <CatalogThumbnail item={item} />
+            {/* 缩略图区: 平面图模式画 2D 符号, 其余模式画 3D 捕获图 */}
+            <div className={`h-16 ${isPlan ? 'bg-white' : 'bg-gradient-to-br from-gray-50 to-gray-100'}`}>
+              {isPlan ? <PlanSymbolPreview item={item} /> : <CatalogThumbnail item={item} />}
             </div>
             {/* 名称 */}
             <div className="px-1 py-1 text-center">

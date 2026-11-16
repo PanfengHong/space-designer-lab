@@ -6,6 +6,7 @@ import { screenToFloor, snapToGrid } from '../../../utils/r3fBridge';
 import { checkIndoorPlacement, type IndoorColliders } from '../../../utils/collision';
 import { findFurniture, normalizeDeg } from '../../../utils/sceneQuery';
 import { FurnitureContent } from './Furniture';
+import { footprintXOf } from '../../../data/furnitureMeta';
 import type { Furniture } from '../../../types';
 
 /** 旋转手柄拖动时的角度吸附步长 (度) */
@@ -41,10 +42,8 @@ interface Footprint {
 /**
  * 用 size[0] 作为局部 X 轴建模的素材 —— 与项目约定 (X = size[2], Z = size[0]) 相反。
  * 占位盒必须跟着各自的建模轴向走, 否则高亮框/落点环会和视觉差 90°。
- * (Toilet: tankW = w*0.85 直接作为 X; Chair: boxGeometry args=[w, seatT, d])
+ * 例外清单是**数据**, 统一在 data/furnitureMeta.ts (这里原来是第三份副本)。
  */
-const X_IS_SIZE0 = new Set<string>(['toilet', 'chair']);
-
 /** 家具占地半长 — 与 collision.ts 的 furnitureObb 完全同口径 */
 function localFootprint(f: Furniture): Footprint {
   if (f.type === 'shower') {
@@ -54,7 +53,7 @@ function localFootprint(f: Furniture): Footprint {
     }
     return { hx: f.size[0] / 2, hz: f.size[2] / 2, ox: f.size[0] / 2, oz: f.size[2] / 2, h: f.size[1] };
   }
-  if (X_IS_SIZE0.has(f.type)) {
+  if (footprintXOf(f.type) === 'size0') {
     return { hx: f.size[0] / 2, hz: f.size[2] / 2, ox: 0, oz: 0, h: f.size[1] };
   }
   return { hx: f.size[2] / 2, hz: f.size[0] / 2, ox: 0, oz: 0, h: f.size[1] };

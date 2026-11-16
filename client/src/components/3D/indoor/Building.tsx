@@ -1,5 +1,6 @@
 import type { Room, WallSegment, Door, Window, FrenchWindow } from '../../../types';
 import { useAppStore } from '../../../store/useAppStore';
+import { floorMaterialOf } from '../../../data/floorMaterials';
 import { Floor } from './building/Floor';
 import { Walls } from './building/Walls';
 import { Doors } from './building/Doors';
@@ -143,6 +144,8 @@ interface BuildingProps {
   showCeiling?: boolean;
   doorsOpen?: boolean;
   monochrome?: boolean;
+  /** 地面抬升值 (米), 打断与其它房间地面的共面闪烁 —— 见 utils/floorStack.ts */
+  floorElevation?: number;
 }
 
 /**
@@ -188,6 +191,7 @@ export function Building({
   showCeiling = true,
   doorsOpen = false,
   monochrome = false,
+  floorElevation = 0,
 }: BuildingProps) {
   // 收集所有房间的门和窗 (共享墙需要两侧都开洞)
   const sceneData = useAppStore((s) => s.sceneData);
@@ -209,6 +213,8 @@ export function Building({
         roomId={room.id}
         thickness={floorThickness}
         color={floorColor}
+        material={floorMaterialOf(room)}
+        elevation={floorElevation}
       />
       <Walls
         segments={wallSegments}

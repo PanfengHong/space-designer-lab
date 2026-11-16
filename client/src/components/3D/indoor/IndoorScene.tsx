@@ -13,6 +13,7 @@ import { R3FBridgeBinder } from './DragDrop';
 import { useAppStore } from '../../../store/useAppStore';
 import { useStylePalette } from '../../../constants/styles';
 import { findRoomAt } from '../../../utils/r3fBridge';
+import { floorElevations } from '../../../utils/floorStack';
 import { buildIndoorColliders, checkIndoorPlacement, type IndoorColliders } from '../../../utils/collision';
 import { resolveStructureDrop, structureGhostSize } from '../../../utils/structurePlacement';
 import { inferDevice } from '../../../utils/device';
@@ -327,7 +328,9 @@ const INDOOR_CAMERA_PRESETS: Record<ViewMode, CameraPreset> = {
 const INDOOR_LIGHTING_CONFIGS: Record<string, LightingModeConfig> = {
   // 自然光照: 阳光是主光 (约 50° 斜射, 从窗侧照进房间, 地面上留下墙体/家具投影),
   //   ambient / hemi / IBL 只做补光 —— 补光一高, 方向感就被冲平, 画面发白
-  自然光照: { ambient: 0.08, ambientColor: '#e6edf6', dirIntensity: 2.3, dirColor: '#ffe6b8', dirPos: [13, 16, 10], dir2Intensity: 0.14, dir2Color: '#cfe0f2', dir2Pos: [-9, 8, -7], hemiSky: '#d3e4f5', hemiGround: '#c8c0b0', hemiIntensity: 0.22, pointLights: [], fog: null, envIntensity: 0.2, shadowCameraRange: 20 },
+  //   色温: 阳光用**纯白**。暖白在 2.2 强度下会把白墙与浅色木地板整体染成奶油/橙黄,
+  //   用户明确要白墙, 暖色只留给黄昏与灯具。
+  自然光照: { ambient: 0.1, ambientColor: '#e8eff8', dirIntensity: 2.2, dirColor: '#ffffff', dirPos: [13, 16, 10], dir2Intensity: 0.14, dir2Color: '#cfe0f2', dir2Pos: [-9, 8, -7], hemiSky: '#e4eef9', hemiGround: '#cfd2d6', hemiIntensity: 0.22, pointLights: [], fog: null, envIntensity: 0.2, shadowCameraRange: 20 },
   人造光: { ambient: 0.1, ambientColor: '#ffe9cc', dirIntensity: 0.03, dirColor: '#ffffff', dirPos: [10, 15, 10], dir2Intensity: 0, hemiSky: '#2e2e33', hemiGround: '#232326', hemiIntensity: 0.08, pointLights: [
     { pos: [CENTER_X + 2, 2.4, CENTER_Z + 2], color: '#ffe8cc', intensity: 2.2, dist: 10 },
     { pos: [CENTER_X - 2, 2.4, CENTER_Z - 2], color: '#ffe8cc', intensity: 2.2, dist: 10 },
@@ -390,6 +393,10 @@ function SceneContent({
   }, [viewMode]);
 
   const allRooms = sceneData.rooms;
+
+  // 地面抬升: 房间包围盒互相重叠的那些房间, 顶面共面会打成一片闪烁的地面,
+  // 这里按"谁盖住谁"给一个 1.5mm 级的抬升把它们分开 (见 utils/floorStack.ts)
+  const floorElev = useMemo(() => floorElevations(allRooms), [allRooms]);
 
   const wallColor = monochrome ? '#ffffff' : p.wall;
   const floorColor = monochrome ? '#ffffff' : p.floor;
@@ -454,6 +461,7 @@ function SceneContent({
               showCeiling={showCeiling && viewMode !== 'top' && viewMode !== 'plan'}
               doorsOpen={showDoorsOpen}
               monochrome={monochrome}
+              floorElevation={floorElev[room.id] ?? 0}
             />
           </group>
           {/* 吸顶灯 — 独立于建筑结构层渲染, 层锁定时依然点得开设备面板 */}

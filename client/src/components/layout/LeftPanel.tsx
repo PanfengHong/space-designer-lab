@@ -5,6 +5,8 @@ import { FurnitureCatalog } from '../panel/FurnitureCatalog';
 import { StructureCatalog } from '../panel/StructureCatalog';
 import { OutdoorCatalog } from '../panel/OutdoorCatalog';
 import { OUTDOOR_STYLE_OPTIONS } from '../../constants/outdoorStyles';
+import { floorMaterialDef } from '../../data/floorMaterials';
+import { roomOutline } from '../../utils/roomOutline';
 import type { Room, SceneData } from '../../types';
 import {
   ItemList,
@@ -81,20 +83,9 @@ function roomGroups(room: Room) {
   };
 }
 
-/** 房间面积 (㎡): 墙体端点包围盒估算, 与 structurePlacement / collision 的 roomBounds 同口径 */
+/** 房间面积 (㎡): 与地面 / 天花板同口径 (房间闭合墙环), 不把借来的长墙算进面积 */
 function roomArea(room: Room): number {
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minZ = Infinity;
-  let maxZ = -Infinity;
-  for (const w of room.walls) {
-    minX = Math.min(minX, w.start[0], w.end[0]);
-    maxX = Math.max(maxX, w.start[0], w.end[0]);
-    minZ = Math.min(minZ, w.start[1], w.end[1]);
-    maxZ = Math.max(maxZ, w.start[1], w.end[1]);
-  }
-  if (!isFinite(minX)) return 0;
-  return (maxX - minX) * (maxZ - minZ);
+  return roomOutline(room.walls).area;
 }
 
 /**
@@ -112,6 +103,11 @@ function elementFocusPoint(scene: SceneData, itemId: string): [number, number] |
   const [kind, roomId, elId] = itemId.split(':');
   const room = scene.rooms.find((r) => r.id === roomId);
   if (!room) return null;
+  if (kind === 'floor') {
+    const xs = room.walls.flatMap((w) => [w.start[0], w.end[0]]);
+    const zs = room.walls.flatMap((w) => [w.start[1], w.end[1]]);
+    return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...zs) + Math.max(...zs)) / 2];
+  }
   if (kind === 'wall') {
     const w = room.walls.find((it) => it.id === elId);
     return w ? [(w.start[0] + w.end[0]) / 2, (w.start[1] + w.end[1]) / 2] : null;
@@ -162,8 +158,41 @@ function elementFocusPoint(scene: SceneData, itemId: string): [number, number] |
   );
 }
 
-function InteriorSections({ expanded, toggle }: { expanded: Record<SectionKey, boolean>; toggle: ToggleFn }) {
-  const spaces = useAppStore((s) => s.spaces);
+/**
+ * 空间树里的「地板」行 —— 每间房一行, 右侧直接显示当前地面材质,
+ * 点开即可在属性面板里换材质 (卧室木地板 / 厨卫地砖 就靠这里区分)。
+ */
+function FloorRow({
+  room,
+  selected,
+  onSelect,
+}: {
+  room: Room;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const mat = floorMaterialDef(room);
+  return (
+    <button
+      onClick={onSelect}
+      title={`${room.name} 地板 · ${mat.label}`}
+      className={`w-full flex items-center gap-1.5 pl-1.5 pr-2 py-1 text-left transition-colors ${
+        selected ? 'bg-gray-100' : 'hover:bg-gray-50'
+      }`}
+    >
+      <span className={`text-[11px] ${selected ? 'text-gray-800 font-medium' : 'text-gray-600'}`}>地板</span>
+      <span className="ml-auto flex items-center gap-1 text-[9px] text-gray-400 shrink-0">
+        <span
+          className="w-2 h-2 rounded-[2px] border border-black/10"
+          style={{ backgroundColor: mat.swatch }}
+        />
+        {mat.short}
+      </span>
+    </button>
+  );
+}
+
+function InteriorSections({ expanded, toggle }: { expanded: Record<SectionKey, boolean>; toggle: ToggleFn }) {  const spaces = useAppStore((s) => s.spaces);
   const activeSpaceId = useAppStore((s) => s.activeSpaceId);
   const selectSpace = useAppStore((s) => s.selectSpace);
   const layers = useAppStore((s) => s.layers);
@@ -294,6 +323,13 @@ function InteriorSections({ expanded, toggle }: { expanded: Record<SectionKey, b
 
               {isOpen && (
                 <div className="ml-5 border-l border-gray-100 pb-0.5">
+                  {room && (
+                    <FloorRow
+                      room={room}
+                      selected={selectedStructureId === `floor:${space.id}`}
+                      onSelect={() => pickStructure(`floor:${space.id}`)}
+                    />
+                  )}
                   <GroupNode
                     label="墙体"
                     items={g.walls}

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { Room } from '../../../../types';
 import { useStylePalette } from '../../../../constants/styles';
 import { useAppStore, DEVICE_DEFAULTS } from '../../../../store/useAppStore';
-import { roomBounds } from '../../../../utils/roomBounds';
+import { roomOutline } from '../../../../utils/roomOutline';
 import { layoutCeilingLamps } from '../../../../utils/ceilingLamps';
 
 interface CeilingLightProps {
@@ -222,7 +222,8 @@ export function RoomCeilingLights({
   baseIntensity,
   monochrome,
 }: RoomCeilingLightsProps) {
-  const bounds = roomBounds(room.walls);
+  // 与天花板同口径: 房间闭合墙环, 灯才落在天花板正中
+  const bounds = roomOutline(room.walls);
   if (!bounds) return null;
 
   /**

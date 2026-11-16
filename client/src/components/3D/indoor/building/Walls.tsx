@@ -3,7 +3,7 @@ import { useThree } from '@react-three/fiber';
 import type { WallSegment } from '../../../../types';
 import { useAppStore } from '../../../../store/useAppStore';
 import { wallDragLive } from '../../../../utils/hudAnchor';
-import { roomBounds } from '../../../../utils/roomBounds';
+import { roomOutline } from '../../../../utils/roomOutline';
 import { PICK_FURNITURE } from '../../../../utils/pickTags';
 import * as THREE from 'three';
 
@@ -463,8 +463,9 @@ export function Walls({
       {/* 天花板 - 覆盖整个房间的面板 */}
       {showCeiling && (
         (() => {
-          // 用与吸顶灯定位相同的包围盒口径 (忽略开放口段), 保证灯落在天花板中心
-          const b = roomBounds(segments);
+          // 天花板铺到房间真实轮廓 (闭合墙环), 不是墙体端点包围盒 —— 否则会被
+          // 借来的长墙拉进隔壁空间
+          const b = roomOutline(segments);
           if (!b) return null;
           const width = b.width + thickness;
           const depth = b.depth + thickness;
@@ -472,7 +473,7 @@ export function Walls({
             <mesh position={[b.cx, height, b.cz]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
               <planeGeometry args={[width, depth]} />
               <meshStandardMaterial
-                color="#f0ece4"
+                color="#f4f5f6"
                 side={THREE.DoubleSide}
                 transparent={opacity < 1}
                 opacity={opacity}

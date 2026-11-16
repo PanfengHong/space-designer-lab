@@ -1,6 +1,16 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
-import type { Room, WallSegment, Door, Furniture } from '../../types';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import type { Room, Furniture } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
+import { inferDevice } from '../../utils/device';
+import { buildIndoorColliders, checkIndoorPlacement } from '../../utils/collision';
+import { findRoomAt } from '../../utils/r3fBridge';
+import { roomOutline } from '../../utils/roomOutline';
+import { footprintOf } from '../../data/furnitureMeta';
+import { FLOOR_MATERIALS, FLOOR_MATERIAL_ORDER, floorMaterialDef } from '../../data/floorMaterials';
+import { normalizeDeg } from '../../utils/sceneQuery';
+import { C } from './planColors';
+import { FurnitureSymbol2D, furnitureHitTest } from './furnitureSymbol2D';
+import { WallLine, Door2D, Window2D, BayWindow2D, FrenchWindow2D } from './structureSymbol2D';
 
 /* ============================================================
  * 极简灰阶平面图 (参考建筑户型图风格)
@@ -8,26 +18,68 @@ import { useAppStore } from '../../store/useAppStore';
  *  - 浅灰简化家具, 无文字标注
  *  - 灰阶门窗, 无彩色
  *  - 房间标签居中, 深灰文字
+ *
+ * 同时是**编辑器**: 支持从素材栏拖入、拖动已有家具、旋转 90°。
+ * 放置链路与 3D 完全共用 (findRoomAt / buildIndoorColliders / checkIndoorPlacement),
+ * 不写第二套判定; 拖动期间只更新局部 state, 松手才提交一次 → 一次拖动 = 一条撤销记录。
  * ============================================================ */
 
-// 灰阶色板
-const C = {
-  bg: '#f5f5f5',
-  floor: '#ffffff',
-  floorAlt: '#f0f0f0',
-  wall: '#1f1f1f',
-  wallInner: '#2a2a2a',
-  door: '#888888',
-  doorArc: '#bbbbbb',
-  window: '#9a9a9a',
-  windowFill: '#d8d8d8',
-  furniture: '#e2e2e2',
-  furnitureStroke: '#b8b8b8',
-  furnitureDark: '#d0d0d0',
-  furnitureLight: '#ededed',
-  text: '#555555',
-  textDim: '#888888',
-};
+/** 靠墙吸附距离 (米): 家具边缘离墙面小于这个值就贴上去 */
+const SNAP_WALL = 0.12;
+/** 网格吸附步长 (米) */
+const SNAP_GRID = 0.05;
+/** 与其它家具对齐吸附距离 (米) */
+const SNAP_ALIGN = 0.06;
+
+/** 房间内墙面 (墙中心线包围盒向内收半墙厚) */
+interface RoomInner {
+  l: number;
+  r: number;
+  t: number;
+  b: number;
+}
+
+/**
+ * 吸附辅助线 —— 拖动时"为什么停在这里"的可视化。
+ *   kind='wall'  贴墙 (绿)   kind='align'  与其它家具边/中线对齐 (琥珀)
+ */
+interface SnapGuide {
+  axis: 'x' | 'z';
+  /** 辅助线所在的世界坐标 (x 时为 X, z 时为 Z) */
+  at: number;
+  from: number;
+  to: number;
+  kind: 'wall' | 'align';
+}
+
+/** 拖拽 HUD 需要的数据: 吸附后的中心 + 旋转后 AABB 半宽/半深 + 辅助线 + 房间内墙面 */
+interface DragHint {
+  hx: number;
+  hz: number;
+  cx: number;
+  cz: number;
+  guides: SnapGuide[];
+  inner: RoomInner | null;
+}
+
+interface PlacementResult {
+  x: number;
+  z: number;
+  ok: boolean;
+  reason?: string;
+  hint: DragHint;
+}
+
+/**
+ * 旋转后家具在世界 AABB 里的半宽/半深。
+ * 家具绕 Y 轴任意角度旋转后, 其外接 AABB 的半长 = |hx·cosθ| + |hz·sinθ|。
+ */
+function aabbHalf(w: number, h: number, rotation: number) {
+  const rad = (rotation * Math.PI) / 180;
+  const c = Math.abs(Math.cos(rad));
+  const s = Math.abs(Math.sin(rad));
+  return { hx: (w / 2) * c + (h / 2) * s, hz: (w / 2) * s + (h / 2) * c };
+}
 
 export function FloorPlan2D() {
   const showSpaceName = useAppStore((s) => s.viewSettings.showSpaceName);
@@ -60,6 +112,179 @@ export function FloorPlan2D() {
   const svgRef = useRef<SVGSVGElement>(null);
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+
+  /**
+   * 拖动中家具的实时位置 (局部 state)。
+   * 硬约定: 拖动期间绝不写 store —— 每帧写会让整棵树重渲染导致卡顿,
+   * 而且会灌进几十条撤销记录。松手时才 updateFurniture 一次。
+   */
+  const [moveGhost, setMoveGhost] = useState<{
+    id: string;
+    x: number;
+    z: number;
+    ok: boolean;
+    hint: DragHint;
+  } | null>(null);
+  const moveRef = useRef<{
+    id: string;
+    startClientX: number;
+    startClientY: number;
+    origX: number;
+    origZ: number;
+    grabbed: boolean;
+    /** 最近一次解析出的落点 — pointerup 从这里提交, 避免读到过期 state */
+    last: { x: number; z: number; ok: boolean; hint: DragHint } | null;
+  } | null>(null);
+
+  /** 从素材栏拖入时的落点预览 */
+  const [dropPreview, setDropPreview] = useState<{
+    furniture: Furniture;
+    ok: boolean;
+    reason?: string;
+    hint: DragHint;
+  } | null>(null);
+
+  const draggingFurniture = useAppStore((s) => s.draggingFurniture);
+  const setDraggingFurniture = useAppStore((s) => s.setDraggingFurniture);
+  const addFurniture = useAppStore((s) => s.addFurniture);
+  const updateFurniture = useAppStore((s) => s.updateFurniture);
+
+  /** 占位盒 (墙 + 家具 + 房间范围) — 放置校验用, 与 3D 拖拽共用同一份计算 */
+  const colliders = useMemo(() => buildIndoorColliders(sceneData), [sceneData]);
+
+  /** 屏幕坐标 → 世界坐标 (经 SVG CTM 求逆, 自然包含 pan/zoom 变换) */
+  const clientToWorld = useCallback((clientX: number, clientY: number): [number, number] | null => {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const p = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+    return [p.x, p.y];
+  }, []);
+
+  /**
+   * 落点吸附 + 校验。
+   * 吸附链: 贴墙 → 与其它家具对齐 → 5cm 网格 (每轴独立, 先到先得);
+   * 候选一律用真实占位盒校验, 不过就如实返回 ok=false (预览画红框),
+   * 不再退而求其次 —— 否则会出现"看着是绿的, 放手却嵌进墙里"。
+   *
+   * 同时返回 hint (吸附辅助线 + 房间内墙面), 供拖拽 HUD 画贴墙高亮和四向净距。
+   */
+  const resolvePlacement = useCallback(
+    (rawX: number, rawZ: number, f: Furniture, roomId: string | null): PlacementResult => {
+      const { w, h } = footprintOf(f);
+      const { hx, hz } = aabbHalf(w, h, f.rotation);
+      const room = roomId ? sceneData.rooms.find((r) => r.id === roomId) ?? null : null;
+      const ht = (room?.walls[0]?.thickness ?? wallT) / 2;
+
+      const guides: SnapGuide[] = [];
+      let inner: RoomInner | null = null;
+      if (room) {
+        // 内墙面 = 真实房间轮廓收半墙厚 (与地面填充同一口径, 净距读数才对得上)
+        const b = roomOutline(room.walls);
+        inner = { l: b.minX + ht, r: b.maxX - ht, t: b.minZ + ht, b: b.maxZ - ht };
+      }
+
+      let x = rawX;
+      let z = rawZ;
+      let snapX: 'wall' | 'align' | null = null;
+      let snapZ: 'wall' | 'align' | null = null;
+      let faceX: 'l' | 'r' | null = null;
+      let faceZ: 't' | 'b' | null = null;
+
+      // 1) 贴墙吸附: 家具 AABB 边缘离内墙面小于 SNAP_WALL 就贴齐 (含半墙厚补偿)
+      if (inner) {
+        if (Math.abs(x - hx - inner.l) < SNAP_WALL) { x = inner.l + hx; snapX = 'wall'; faceX = 'l'; }
+        else if (Math.abs(x + hx - inner.r) < SNAP_WALL) { x = inner.r - hx; snapX = 'wall'; faceX = 'r'; }
+        if (Math.abs(z - hz - inner.t) < SNAP_WALL) { z = inner.t + hz; snapZ = 'wall'; faceZ = 't'; }
+        else if (Math.abs(z + hz - inner.b) < SNAP_WALL) { z = inner.b - hz; snapZ = 'wall'; faceZ = 'b'; }
+      }
+
+      // 2) 与同房间其它家具对齐: 我方左/中/右 对齐 对方左/中/右, 取最近的一条
+      if (room && (!snapX || !snapZ)) {
+        const others = room.furniture.filter((o) => o.id !== f.id && !o.embedded);
+        if (!snapX) {
+          let best = SNAP_ALIGN, bestDx = 0, bestAt = 0, gFrom = 0, gTo = 0;
+          for (const o of others) {
+            const of = footprintOf(o);
+            const oa = aabbHalf(of.w, of.h, o.rotation);
+            const ox = o.position[0], oz = o.position[2];
+            for (const c of [ox - oa.hx, ox, ox + oa.hx]) {
+              for (const m of [x - hx, x, x + hx]) {
+                const d = c - m;
+                if (Math.abs(d) < best) {
+                  best = Math.abs(d); bestDx = d; bestAt = c;
+                  gFrom = oz - oa.hz; gTo = oz + oa.hz;
+                }
+              }
+            }
+          }
+          if (best < SNAP_ALIGN) {
+            x += bestDx;
+            snapX = 'align';
+            guides.push({
+              axis: 'x', at: bestAt,
+              from: Math.min(gFrom, z - hz) - 0.18,
+              to: Math.max(gTo, z + hz) + 0.18,
+              kind: 'align',
+            });
+          }
+        }
+        if (!snapZ) {
+          let best = SNAP_ALIGN, bestDz = 0, bestAt = 0, gFrom = 0, gTo = 0;
+          for (const o of others) {
+            const of = footprintOf(o);
+            const oa = aabbHalf(of.w, of.h, o.rotation);
+            const ox = o.position[0], oz = o.position[2];
+            for (const c of [oz - oa.hz, oz, oz + oa.hz]) {
+              for (const m of [z - hz, z, z + hz]) {
+                const d = c - m;
+                if (Math.abs(d) < best) {
+                  best = Math.abs(d); bestDz = d; bestAt = c;
+                  gFrom = ox - oa.hx; gTo = ox + oa.hx;
+                }
+              }
+            }
+          }
+          if (best < SNAP_ALIGN) {
+            z += bestDz;
+            snapZ = 'align';
+            guides.push({
+              axis: 'z', at: bestAt,
+              from: Math.min(gFrom, x - hx) - 0.18,
+              to: Math.max(gTo, x + hx) + 0.18,
+              kind: 'align',
+            });
+          }
+        }
+      }
+
+      // 3) 网格吸附 (5cm), 只作用在**没吃到**前两级吸附的轴上 ——
+      //    否则贴墙算出的坐标会被网格又拉走一两厘米, 贴墙永远贴不实。
+      if (!snapX) x = Math.round(x / SNAP_GRID) * SNAP_GRID;
+      if (!snapZ) z = Math.round(z / SNAP_GRID) * SNAP_GRID;
+
+      // 4) 贴墙高亮线 (按最终位置画, 覆盖家具所占的那一段墙)
+      if (inner && faceX) {
+        guides.push({
+          axis: 'x', at: faceX === 'l' ? inner.l : inner.r,
+          from: z - hz - 0.22, to: z + hz + 0.22, kind: 'wall',
+        });
+      }
+      if (inner && faceZ) {
+        guides.push({
+          axis: 'z', at: faceZ === 't' ? inner.t : inner.b,
+          from: x - hx - 0.22, to: x + hx + 0.22, kind: 'wall',
+        });
+      }
+
+      const hint: DragHint = { hx, hz, cx: x, cz: z, guides, inner };
+      if (!roomId) return { x, z, ok: false, reason: '放置区域不在任何一个空间内', hint };
+      const check = checkIndoorPlacement(colliders, f, x, z, f.id.startsWith('__') ? undefined : f.id);
+      return { x, z, ok: check.ok, reason: check.ok ? undefined : check.reason, hint };
+    },
+    [sceneData, colliders, wallT],
+  );
 
   // 计算所有墙的边界
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -106,63 +331,186 @@ export function FloorPlan2D() {
    * 点击穿透到下方的电视柜等家具 (仍可通过空间目录选中)。
    */
   const pickFurnitureAt = useCallback((clientX: number, clientY: number): Furniture | null => {
-    const svg = svgRef.current;
-    if (!svg) return null;
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return null;
-    const p = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+    const p = clientToWorld(clientX, clientY);
+    if (!p) return null;
+    const [px, pz] = p;
     const all = useAppStore.getState().sceneData.rooms.flatMap((r) => r.furniture);
     // 低位内嵌件 (灶台/水槽, 占台面) 优先命中; 挂墙高位内嵌件 (电视 y≥1) 不参与命中
     const embedded = all.filter((f) => f.embedded && f.position[1] < 1);
     const normal = all.filter((f) => !f.embedded);
-    for (const f of embedded) if (furnitureHitTest(f, p.x, p.y)) return f;
+    for (const f of embedded) if (furnitureHitTest(f, px, pz)) return f;
     for (let i = normal.length - 1; i >= 0; i--) {
-      if (furnitureHitTest(normal[i], p.x, p.y)) return normal[i];
+      if (furnitureHitTest(normal[i], px, pz)) return normal[i];
     }
     return null;
-  }, []);
+  }, [clientToWorld]);
+
+  /** 室内设计层锁定 = 家具不可选中/拖动, 一律当作空白处理 */
+  const interiorLocked = () =>
+    useAppStore.getState().layers.find((l) => l.id === 'interior')?.locked ?? false;
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
-    // 室内层锁定 = 家具不可选中, 一律当作空白处理
-    const locked = useAppStore.getState().layers.find((l) => l.id === 'interior')?.locked ?? false;
-    const hit = locked ? null : pickFurnitureAt(e.clientX, e.clientY);
+    const hit = interiorLocked() ? null : pickFurnitureAt(e.clientX, e.clientY);
     if (hit) {
       useAppStore.getState().selectFurniture(hit.id);
-      return; // 命中家具: 选中, 不进入画布平移
+      // 内嵌件 (灶台/水槽嵌在台面里) 不参与移动: 占地本就落在母体柜内, 一动必判重叠
+      if (!hit.embedded) {
+        moveRef.current = {
+          id: hit.id,
+          startClientX: e.clientX,
+          startClientY: e.clientY,
+          origX: hit.position[0],
+          origZ: hit.position[2],
+          grabbed: false,
+          last: null,
+        };
+        // 合成事件 (自动化测试) 里 pointerId 可能不是活动指针, 捕获会抛错, 忽略即可
+        try { (e.target as Element).setPointerCapture(e.pointerId); } catch {}
+      }
+      return; // 命中家具: 选中/拖动, 不进入画布平移
     }
     // 点在空白处 → 清除选中, 与 3D 视口行为一致
     useAppStore.getState().selectFurniture(null);
     isPanning.current = true;
     panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
-    (e.target as Element).setPointerCapture(e.pointerId);
+    try { (e.target as Element).setPointerCapture(e.pointerId); } catch {}
   }, [pan.x, pan.y, pickFurnitureAt]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    // ---- 拖动已有家具: 只更新局部 ghost, 不写 store ----
+    const mv = moveRef.current;
+    if (mv) {
+      const dxs = e.clientX - mv.startClientX;
+      const dys = e.clientY - mv.startClientY;
+      if (!mv.grabbed && Math.hypot(dxs, dys) < 4) return; // 抖动阈值: 小于 4px 仍算点击
+      mv.grabbed = true;
+      const p = clientToWorld(e.clientX, e.clientY);
+      if (!p) return;
+      const roomsNow = useAppStore.getState().sceneData.rooms;
+      const f = roomsNow.flatMap((r) => r.furniture).find((x) => x.id === mv.id);
+      if (!f) return;
+      const roomId = findRoomAt(p[0], p[1], roomsNow);
+      const res = resolvePlacement(p[0], p[1], f, roomId);
+      mv.last = { x: res.x, z: res.z, ok: res.ok, hint: res.hint };
+      setMoveGhost({ id: mv.id, x: res.x, z: res.z, ok: res.ok, hint: res.hint });
+      return;
+    }
+    // ---- 平移画布 ----
     if (isPanning.current) {
       const dx = e.clientX - panStart.current.x;
       const dy = e.clientY - panStart.current.y;
       setPan({ x: panStart.current.panX + dx, y: panStart.current.panY + dy });
       return;
     }
-    // 悬停高亮光标: 家具上 pointer, 其余 grab
-    const locked = useAppStore.getState().layers.find((l) => l.id === 'interior')?.locked ?? false;
-    const over = !locked && pickFurnitureAt(e.clientX, e.clientY);
-    const cursor = over ? 'pointer' : 'grab';
+    // 悬停光标: 家具上 move, 其余 grab
+    const over = !interiorLocked() && pickFurnitureAt(e.clientX, e.clientY);
+    const cursor = over ? 'move' : 'grab';
     if (containerRef.current && containerRef.current.style.cursor !== cursor) {
       containerRef.current.style.cursor = cursor;
     }
-  }, [pickFurnitureAt]);
+  }, [clientToWorld, pickFurnitureAt, resolvePlacement]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    const mv = moveRef.current;
+    if (mv) {
+      moveRef.current = null;
+      // 松手才提交: 一次拖动 = 一条撤销记录
+      if (mv.grabbed && mv.last) {
+        const moving = useAppStore.getState().sceneData.rooms
+          .flatMap((r) => r.furniture)
+          .find((x) => x.id === mv.id);
+        // 非法落点 (压墙/压别的家具/出房间) 直接放弃, 家具留在原位 —— 预览已经红框提示过
+        if (mv.last.ok && moving) {
+          updateFurniture(mv.id, {
+            position: [mv.last.x, moving.position[1], mv.last.z],
+          });
+        }
+      }
+      setMoveGhost(null);
+    }
     isPanning.current = false;
     if (containerRef.current) containerRef.current.style.cursor = 'grab';
     try { (e.target as Element).releasePointerCapture(e.pointerId); } catch {}
-  }, []);
+  }, [updateFurniture]);
 
   const handleDoubleClick = useCallback(() => {
     setZoom(1);
     setPan({ x: 0, y: 0 });
+  }, []);
+
+  /* ==================== 从素材栏拖入 ==================== */
+
+  /** 按素材模板造一件"待放"家具 (preview id 不参与自我排除, 见 resolvePlacement) */
+  const makePreview = useCallback(
+    (x: number, z: number): Furniture | null => {
+      const dw = useAppStore.getState().draggingFurniture;
+      if (!dw) return null;
+      return {
+        id: '__preview__',
+        name: dw.name,
+        position: [x, 0, z],
+        rotation: 0,
+        size: dw.size,
+        type: dw.type,
+        color: dw.color,
+      };
+    },
+    [],
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    // 只有拖的是家具才接管; 拖结构元素时不响应 (2D 结构放置尚未开放)
+    if (!useAppStore.getState().draggingFurniture || interiorLocked()) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    const p = clientToWorld(e.clientX, e.clientY);
+    if (!p) return;
+    const roomsNow = useAppStore.getState().sceneData.rooms;
+    const f = makePreview(p[0], p[1]);
+    if (!f) return;
+    const roomId = findRoomAt(p[0], p[1], roomsNow);
+    const res = resolvePlacement(p[0], p[1], f, roomId);
+    setDropPreview({
+      furniture: { ...f, position: [res.x, 0, res.z] },
+      ok: res.ok,
+      reason: res.reason,
+      hint: res.hint,
+    });
+  }, [clientToWorld, makePreview, resolvePlacement]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDropPreview(null);
+    const dw = useAppStore.getState().draggingFurniture;
+    if (!dw || interiorLocked()) return;
+    const p = clientToWorld(e.clientX, e.clientY);
+    if (!p) return;
+    const roomsNow = useAppStore.getState().sceneData.rooms;
+    const f = makePreview(p[0], p[1]);
+    if (!f) return;
+    const roomId = findRoomAt(p[0], p[1], roomsNow);
+    const res = resolvePlacement(p[0], p[1], f, roomId);
+    if (!res.ok || !roomId) return;
+    addFurniture(roomId, {
+      ...f,
+      id: `f-drag-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      position: [res.x, 0, res.z],
+      // 拖入即带设备身份 (空调/窗帘/冰箱/电视), 之后点击就能调出控制面板
+      device: inferDevice(dw.type, dw.size),
+    });
+    setDraggingFurniture(null);
+  }, [clientToWorld, makePreview, resolvePlacement, addFurniture, setDraggingFurniture]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // 指针移到子元素上也会触发 dragleave, 只有真正越出容器才清预览
+    const el = containerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const inside =
+      e.clientX >= r.left && e.clientX <= r.right &&
+      e.clientY >= r.top && e.clientY <= r.bottom;
+    if (!inside) setDropPreview(null);
   }, []);
 
   useEffect(() => {
@@ -187,11 +535,19 @@ export function FloorPlan2D() {
     return () => ro.disconnect();
   }, [zoom, vbW, setPixelsPerMeter]);
 
+  // 拖拽在素材栏那边结束时 (dragend) 也要收掉落点预览, 否则会残留一个幽灵框
+  useEffect(() => {
+    if (!draggingFurniture) setDropPreview(null);
+  }, [draggingFurniture]);
+
   return (
     <div
       ref={containerRef}
       className="w-full h-full flex items-center justify-center overflow-hidden relative"
       style={{ backgroundColor: C.bg, cursor: isPanning.current ? 'grabbing' : 'grab' }}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      onDragLeave={handleDragLeave}
     >
       {/* 缩放控制按钮 */}
       <div className="absolute right-3 bottom-3 z-10 flex flex-col gap-1 select-none">
@@ -226,11 +582,12 @@ export function FloorPlan2D() {
         onPointerUp={handlePointerUp}
         onDoubleClick={handleDoubleClick}
       >
+        <FloorPatterns />
+
         {/* 房间地面填充 */}
         {rooms.map((room) => (
           <RoomFloor key={`floor-${room.id}`} room={room} />
         ))}
-
         {/* 飘窗凸出结构 */}
         {rooms.map((room) =>
           room.bayWindows?.map((bw) => (
@@ -275,14 +632,33 @@ export function FloorPlan2D() {
             内嵌件放到最上层后, 小面积的灶台/水槽优先吃到点击。 */}
         {rooms.map((room) =>
           room.furniture.filter((f) => !f.embedded).map((f) => (
-            <Furniture2DInteractive key={f.id} furniture={f} />
+            <Furniture2DInteractive key={f.id} furniture={f} dragging={moveGhost?.id === f.id} />
           ))
         )}
         {rooms.map((room) =>
           room.furniture.filter((f) => f.embedded).map((f) => (
-            <Furniture2DInteractive key={f.id} furniture={f} />
+            <Furniture2DInteractive key={f.id} furniture={f} dragging={false} />
           ))
         )}
+
+        {/* 拖动中的实时预览: 只画局部 state, 不碰 store */}
+        {moveGhost && (() => {
+          const moving = rooms.flatMap((r) => r.furniture).find((f) => f.id === moveGhost.id);
+          if (!moving) return null;
+          return (
+            <PlacementGhost
+              furniture={{ ...moving, position: [moveGhost.x, moving.position[1], moveGhost.z] }}
+              ok={moveGhost.ok}
+            />
+          );
+        })()}
+
+        {/* 从素材栏拖入时的落点预览 */}
+        {dropPreview && <PlacementGhost furniture={dropPreview.furniture} ok={dropPreview.ok} />}
+
+        {/* 拖拽辅助: 吸附辅助线 (贴墙/对齐) + 四向净距 + 落点十字 */}
+        {moveGhost && <DragHUD hint={moveGhost.hint} />}
+        {dropPreview && <DragHUD hint={dropPreview.hint} />}
 
         {/* 尺寸标注: 周长链式标注 (总尺寸 + 逐段净空) */}
         {showDimensions && (
@@ -538,726 +914,276 @@ function PerimeterDims({
   );
 }
 
-/** 房间地面填充 — 白色 */
+/** 房间地面填充 — 白底 + 材质色淡染 + 材质线稿 (木板缝 / 砖缝 / 地毯点) */
 function RoomFloor({ room }: { room: Room }) {
-  const xs = room.walls.flatMap((w) => [w.start[0], w.end[0]]);
-  const zs = room.walls.flatMap((w) => [w.start[1], w.end[1]]);
-  const x = Math.min(...xs);
-  const z = Math.min(...zs);
-  const w = Math.max(...xs) - x;
-  const h = Math.max(...zs) - z;
-  return (
-    <rect x={x} y={z} width={w} height={h} fill={C.floor} stroke="none" />
-  );
-}
-
-/** 单段墙体 — 深色粗线, 圆角端点, 窗户位置断开 */
-function WallLine({
-  wall,
-  thickness,
-  windows,
-}: {
-  wall: WallSegment;
-  thickness: number;
-  windows: import('../../types').Window[];
-}) {
-  const [x1, z1] = wall.start;
-  const [x2, z2] = wall.end;
-
-  const isHorizontal = Math.abs(z2 - z1) < 0.01;
-  const isVertical = Math.abs(x2 - x1) < 0.01;
-
-  const gaps: [number, number][] = [];
-  for (const win of windows) {
-    const [wx, , wz] = win.position;
-    const ww = win.width;
-    const rot = win.rotation ?? 0;
-    const winIsVertical = rot === 90 || rot === 270;
-
-    if (isHorizontal && !winIsVertical) {
-      if (Math.abs(wz - z1) < 0.3) gaps.push([wx - ww / 2, wx + ww / 2]);
-    } else if (isVertical && winIsVertical) {
-      if (Math.abs(wx - x1) < 0.3) gaps.push([wz - ww / 2, wz + ww / 2]);
-    }
-  }
-
-  const wallLen = Math.sqrt((x2 - x1) ** 2 + (z2 - z1) ** 2);
-  if (wallLen < 0.001) return null;
-
-  const gapRanges: [number, number][] = gaps.map(([s, e]) => {
-    if (isHorizontal) {
-      const denom = x2 - x1 || 1;
-      return [(s - x1) / denom, (e - x1) / denom];
-    } else {
-      const denom = z2 - z1 || 1;
-      return [(s - z1) / denom, (e - z1) / denom];
-    }
-  });
-
-  const sortedRanges = gapRanges
-    .map(([s, e]) => (s > e ? [e, s] : [s, e]) as [number, number])
-    .sort((a, b) => a[0] - b[0]);
-
-  const segments: [number, number][] = [];
-  let cursor = 0;
-  for (const [gs, ge] of sortedRanges) {
-    const s = Math.max(0, Math.min(1, gs));
-    const e = Math.max(0, Math.min(1, ge));
-    if (s > cursor) segments.push([cursor, s]);
-    cursor = Math.max(cursor, e);
-  }
-  if (cursor < 1) segments.push([cursor, 1]);
-
-  if (segments.length === 0) return null;
-
+  // 与 3D 地坪同口径: 用闭合墙环而不是墙体端点包围盒 (借来的长墙会把地面拉出房间)
+  const b = roomOutline(room.walls);
+  const x = b.minX;
+  const z = b.minZ;
+  const w = b.width;
+  const h = b.depth;
+  const m = floorMaterialDef(room);
   return (
     <g>
-      {segments.map(([ts, te], i) => {
-        const sx = x1 + (x2 - x1) * ts;
-        const sz = z1 + (z2 - z1) * ts;
-        const ex = x1 + (x2 - x1) * te;
-        const ez = z1 + (z2 - z1) * te;
-        return (
-          <line
-            key={i}
-            x1={sx} y1={sz} x2={ex} y2={ez}
-            stroke={C.wall}
-            strokeWidth={thickness}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        );
-      })}
-    </g>
-  );
-}
-
-/** 门 — 灰阶风格, 打开状态 + 弧线 */
-function Door2D({ door, wallThickness: wt }: { door: Door; wallThickness: number }) {
-  const [x, , z] = door.position;
-  const w = door.width;
-  const rot = door.rotation ?? 0;
-  const openInward = door.openInward ?? false;
-  const hingeSide = door.hingeSide ?? 'left';
-  const isVerticalWall = rot === 90 || rot === 270;
-  const hingeRight = hingeSide === 'right';
-
-  let hingeX: number, hingeZ: number;
-  let closedX: number, closedZ: number;
-  let endX: number, endZ: number;
-  let sweep: number;
-
-  if (isVerticalWall) {
-    if (rot === 90) {
-      hingeX = x;
-      hingeZ = hingeRight ? z - w / 2 : z + w / 2;
-      closedX = x;
-      closedZ = hingeRight ? z + w / 2 : z - w / 2;
-      endX = x + (openInward ? w : -w);
-      endZ = hingeZ;
-      sweep = openInward ? 1 : 0;
-    } else {
-      hingeX = x;
-      hingeZ = hingeRight ? z + w / 2 : z - w / 2;
-      closedX = x;
-      closedZ = hingeRight ? z - w / 2 : z + w / 2;
-      endX = x + (openInward ? w : -w);
-      endZ = hingeZ;
-      sweep = openInward ? 0 : 1;
-    }
-  } else {
-    if (rot === 0 || rot === undefined) {
-      hingeX = hingeRight ? x + w / 2 : x - w / 2;
-      hingeZ = z;
-      closedX = hingeRight ? x - w / 2 : x + w / 2;
-      closedZ = z;
-      endX = hingeX;
-      endZ = z + (openInward ? w : -w);
-      sweep = openInward ? 1 : 0;
-    } else {
-      hingeX = hingeRight ? x - w / 2 : x + w / 2;
-      hingeZ = z;
-      closedX = hingeRight ? x + w / 2 : x - w / 2;
-      closedZ = z;
-      endX = hingeX;
-      endZ = z + (openInward ? w : -w);
-      sweep = openInward ? 0 : 1;
-    }
-  }
-
-  return (
-    <g>
-      {/* 门洞 (白色缺口, 覆盖墙体) */}
-      <line
-        x1={isVerticalWall ? x : x - w / 2}
-        y1={isVerticalWall ? z - w / 2 : z}
-        x2={isVerticalWall ? x : x + w / 2}
-        y2={isVerticalWall ? z + w / 2 : z}
-        stroke={C.floor}
-        strokeWidth={wt * 0.9}
-      />
-      {/* 开门轨迹弧线 */}
-      <path
-        d={`M ${closedX} ${closedZ} A ${w} ${w} 0 0 ${sweep} ${endX} ${endZ}`}
-        fill="none"
-        stroke={C.doorArc}
-        strokeWidth={0.03}
-        strokeDasharray="0.1 0.08"
-      />
-      {/* 门扇 */}
-      <line
-        x1={hingeX} y1={hingeZ} x2={endX} y2={endZ}
-        stroke={C.door}
-        strokeWidth={0.07}
-        strokeLinecap="round"
-      />
-    </g>
-  );
-}
-
-/** 普通窗户 — 灰阶三线段 + 浅灰填充 */
-function Window2D({ window, wallThickness: wt }: { window: import('../../types').Window; wallThickness: number }) {
-  const [x, , z] = window.position;
-  const w = window.width;
-  const rot = window.rotation ?? 0;
-  const isVertical = rot === 90 || rot === 270;
-  const half = wt / 2;
-
-  if (isVertical) {
-    return (
-      <g>
-        <rect x={x - half} y={z - w / 2} width={wt} height={w} fill={C.windowFill} opacity={0.6} />
-        <line x1={x} y1={z - w / 2} x2={x} y2={z + w / 2} stroke={C.window} strokeWidth={0.04} />
-        <line x1={x - half} y1={z - w / 2} x2={x - half} y2={z + w / 2} stroke={C.window} strokeWidth={0.04} />
-        <line x1={x + half} y1={z - w / 2} x2={x + half} y2={z + w / 2} stroke={C.window} strokeWidth={0.04} />
-      </g>
-    );
-  }
-  return (
-    <g>
-      <rect x={x - w / 2} y={z - half} width={w} height={wt} fill={C.windowFill} opacity={0.6} />
-      <line x1={x - w / 2} y1={z} x2={x + w / 2} y2={z} stroke={C.window} strokeWidth={0.04} />
-      <line x1={x - w / 2} y1={z - half} x2={x + w / 2} y2={z - half} stroke={C.window} strokeWidth={0.04} />
-      <line x1={x - w / 2} y1={z + half} x2={x + w / 2} y2={z + half} stroke={C.window} strokeWidth={0.04} />
-    </g>
-  );
-}
-
-/** 飘窗 — 灰阶凸出矩形 */
-function BayWindow2D({ bayWindow, wallThickness: wt }: { bayWindow: import('../../types').BayWindow; wallThickness: number }) {
-  const [x, , z] = bayWindow.position;
-  const w = bayWindow.width;
-  const d = bayWindow.depth;
-  const rot = bayWindow.rotation ?? 0;
-
-  let rx = x, ry = z, rw = w, rh = d;
-  if (rot === 0 || rot === 180) {
-    rw = w; rh = d;
-    ry = rot === 0 ? z : z - d;
-    rx = x - w / 2;
-  } else {
-    rw = d; rh = w;
-    rx = rot === 90 ? x : x - d;
-    ry = z - w / 2;
-  }
-
-  return (
-    <g>
-      <rect
-        x={rx} y={ry} width={rw} height={rh}
-        fill={C.windowFill}
-        stroke={C.window}
-        strokeWidth={0.06}
-      />
-    </g>
-  );
-}
-
-/** 落地窗 — 灰阶粗线 */
-function FrenchWindow2D({ frenchWindow, wallThickness: wt }: { frenchWindow: import('../../types').FrenchWindow; wallThickness: number }) {
-  const [x, , z] = frenchWindow.position;
-  const w = frenchWindow.width;
-  const rot = frenchWindow.rotation ?? 0;
-  const isVertical = rot === 90 || rot === 270;
-
-  if (isVertical) {
-    return <line x1={x} y1={z - w / 2} x2={x} y2={z + w / 2} stroke={C.window} strokeWidth={0.12} />;
-  }
-  return <line x1={x - w / 2} y1={z} x2={x + w / 2} y2={z} stroke={C.window} strokeWidth={0.12} />;
-}
-
-/**
- * 平面图家具的交互包装 — 选中描边。
- *
- * 命中判定不再依赖逐件铺开的大透明矩形: 相邻大件 (橱柜等) 的命中区会互相
- * 遮挡, 出现"点东橱柜选中冰箱/淋浴"的错位。现在统一由 FloorPlan2D 根节点
- * 的 pointerDown 做几何命中测试 (furnitureHitTest), 本组件只负责:
- *   - 选中态绿色描边 (尺寸与占地同口径)
- *   - 内嵌件 (灶台/水槽) 的描边渲染顺序 (内嵌件后画, 在最上层)
- */
-function Furniture2DInteractive({ furniture }: { furniture: Furniture }) {
-  const selected = useAppStore((s) => s.selectedFurnitureId === furniture.id);
-
-  const [x, , z] = furniture.position;
-  // 描边尺寸 = 占地 (与 furnitureHitTest 同口径); 淋浴间图形从锚点展开, 按 size[0] 作边长
-  const isShower = furniture.type === 'shower';
-  const hitW = isShower ? furniture.size[0] : furniture.size[2];
-  const hitH = isShower ? furniture.size[0] : furniture.size[0];
-  const hitX = isShower ? x : x - hitW / 2;
-  const hitY = isShower ? z : z - hitH / 2;
-
-  return (
-    <g data-fid={furniture.id} data-ftype={furniture.type}>
-      <Furniture2D furniture={furniture} />
-      {selected && (
-        <rect
-          x={hitX - 0.05} y={hitY - 0.05}
-          width={hitW + 0.1} height={hitH + 0.1}
-          transform={`rotate(${-furniture.rotation}, ${x}, ${z})`}
-          fill="none"
-          stroke="#22c55e"
-          strokeWidth={0.045}
-          rx={0.05}
-          pointerEvents="none"
-        />
+      <rect x={x} y={z} width={w} height={h} fill={C.floor} stroke="none" />
+      <rect x={x} y={z} width={w} height={h} fill={m.swatch} fillOpacity={0.09} stroke="none" />
+      {m.pattern !== 'solid' && (
+        <rect x={x} y={z} width={w} height={h} fill={`url(#floor-pat-${m.id})`} stroke="none" />
       )}
     </g>
   );
 }
 
 /**
- * 几何命中测试: 世界坐标点是否落在家具占地内 (考虑旋转)。
- * 矩形占地以 (x, z) 为中心、宽=size[2] (SVG x 向)、深=size[0] (SVG z 向),
- * 旋转后仍是中心对称矩形, 逆旋转到局部坐标再判边界即可。
- * 淋浴间是锚点展开图形, 保持旧行为: 以 (x, z) 为左上角、边长 size[0]。
+ * 地面材质填充图案 —— 与 3D 用同一份材质注册表 (data/floorMaterials.ts)。
+ * 尺寸单位就是 viewBox 的米, 所以木板缝 0.15m、地砖 0.6/0.3m 都是真实比例。
  */
-function furnitureHitTest(f: Furniture, px: number, pz: number, pad = 0.03): boolean {
-  const [x, , z] = f.position;
-  const isShower = f.type === 'shower';
-  const w = isShower ? f.size[0] : f.size[2];
-  const h = isShower ? f.size[0] : f.size[0];
-
-  if (isShower) {
-    return px >= x - pad && px <= x + w + pad && pz >= z - pad && pz <= z + h + pad;
-  }
-
-  const rot = ((f.rotation % 360) + 360) % 360;
-  const rad = (rot * Math.PI) / 180;
-  const dx = px - x, dz = pz - z;
-  // 图形以 SVG rotate(-rot) 绘制, 命中需按同一变换的逆矩阵回到局部坐标
-  const lx = dx * Math.cos(rad) - dz * Math.sin(rad);
-  const lz = dx * Math.sin(rad) + dz * Math.cos(rad);
-  // 床的床头板立在床架 -X 端外侧 0.08m, 命中盒同步向 -X 外扩, 否则点床头板选不中床
-  const padNegX = f.type === 'bed' ? pad + 0.08 : pad;
-  return lx <= w / 2 + pad && lx >= -w / 2 - padNegX && Math.abs(lz) <= h / 2 + pad;
+function FloorPatterns() {
+  return (
+    <defs>
+      {FLOOR_MATERIAL_ORDER.map((id) => {
+        const m = FLOOR_MATERIALS[id];
+        if (m.pattern === 'solid') return null;
+        if (m.pattern === 'plank') {
+          return (
+            <pattern key={id} id={`floor-pat-${id}`} patternUnits="userSpaceOnUse" width={1.2} height={0.15}>
+              <line x1={0} y1={0.002} x2={1.2} y2={0.002} stroke={m.grain} strokeWidth={0.012} opacity={0.55} />
+              <line x1={0.62} y1={0.002} x2={0.62} y2={0.15} stroke={m.grain} strokeWidth={0.01} opacity={0.35} />
+            </pattern>
+          );
+        }
+        if (m.pattern === 'dot') {
+          return (
+            <pattern key={id} id={`floor-pat-${id}`} patternUnits="userSpaceOnUse" width={0.12} height={0.12}>
+              <circle cx={0.06} cy={0.06} r={0.011} fill={m.grain} opacity={0.45} />
+            </pattern>
+          );
+        }
+        const cell = m.pattern === 'grid-coarse' ? 0.6 : 0.3;
+        return (
+          <pattern key={id} id={`floor-pat-${id}`} patternUnits="userSpaceOnUse" width={cell} height={cell}>
+            <path
+              d={`M ${cell} 0 H 0 V ${cell}`}
+              fill="none"
+              stroke={m.grain}
+              strokeWidth={0.012}
+              opacity={0.45}
+            />
+          </pattern>
+        );
+      })}
+    </defs>
+  );
 }
 
-/** 家具 — 极简灰阶图形, 无文字标注 */
-function Furniture2D({ furniture }: { furniture: Furniture }) {
-  if (furniture.type === 'shower') return <Shower2D furniture={furniture} />;
+
+/**
+ * 平面图家具的交互包装 — 符号 + 选中描边 + 旋转手柄。
+ *
+ * 命中判定由 FloorPlan2D 根节点的 pointerDown 统一做 (furnitureHitTest),
+ * 本组件只负责画:
+ *   - 家具符号本身 (FurnitureSymbol2D, 与 3D 同源的类型分派)
+ *   - 选中态绿色描边 (尺寸走 footprintOf, 与命中测试同口径)
+ *   - 右上角旋转手柄 (点一下顺时针 90°, 与键盘 R 同效)
+ * 拖动中的家具压暗, 实时预览交给 PlacementGhost。
+ */
+function Furniture2DInteractive({ furniture, dragging }: { furniture: Furniture; dragging: boolean }) {
+  const selected = useAppStore((s) => s.selectedFurnitureId === furniture.id);
+  const updateFurniture = useAppStore((s) => s.updateFurniture);
 
   const [x, , z] = furniture.position;
-  const [w, , d] = furniture.size;
-  const rot = furniture.rotation;
+  const isShower = furniture.type === 'shower';
+  const { w, h } = footprintOf(furniture);
+  // 淋浴间是从锚点 (x,z) 向 +X/+Z 展开的图形, 描边按边长 size[0] 画
+  const hitW = isShower ? furniture.size[0] : w;
+  const hitH = isShower ? furniture.size[0] : h;
+  const hitX = isShower ? x : x - hitW / 2;
+  const hitY = isShower ? z : z - hitH / 2;
+  const handleR = 0.13;
 
-  // 3D boxGeometry args=[d, h, w] → 2D footprint: localW=d, localH=w
-  const localW = d;
-  const localH = w;
-
-  // 灶台: 深色台面 + 2 个炉头圆圈 + 2 个前端旋钮
-  // 与 3D Stove.tsx 对齐: 炉头沿局部 Z 轴排列 (间距 ±0.28*size[0] = ±0.28*localH),
-  // 旋钮在 +X 前端边缘 (距边 0.04, z=±0.2*size[0])。
-  // 注意 rotate(-rot): three.js 绕 Y 轴旋转俯视是逆时针, SVG rotate 顺视是顺时针,
-  // 两者反向 —— 台面/炉头是 ± 对称的看不出来, 但旋钮在 +X 单边, 方向反了会贴到墙上。
-  if (furniture.type === 'stove') {
-    const burnerR = Math.min(localW, localH) * 0.2;
-    const burnerOffsets: [number, number][] = [
-      [0, -localH * 0.28],
-      [0, localH * 0.28],
-    ];
-    // 3D 灶面是黑色玻璃, 平面图压到比橱柜台面深一档, 否则嵌在橱柜里完全分不出来
-    const plateFill = '#b4b4b4';
-    const burnerStroke = '#5f5f5f';
-    return (
-      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
-        <rect
-          x={x - localW / 2} y={z - localH / 2}
-          width={localW} height={localH}
-          fill={plateFill}
-          stroke="#8f8f8f"
-          strokeWidth={0.025}
-          rx={0.03}
-        />
-        {burnerOffsets.map(([ox, oz], i) => (
-          <g key={i}>
-            <circle cx={x + ox} cy={z + oz} r={burnerR} fill="none" stroke={burnerStroke} strokeWidth={0.035} />
-            {/* 炉头内圈, 对应 3D 火盖 */}
-            <circle cx={x + ox} cy={z + oz} r={burnerR * 0.45} fill="none" stroke={burnerStroke} strokeWidth={0.025} opacity={0.85} />
-          </g>
-        ))}
-        {/* 控制旋钮 (+X 前端边缘) */}
-        {[-localH * 0.2, localH * 0.2].map((oz, i) => (
-          <circle
-            key={`knob-${i}`}
-            cx={x + localW / 2 - 0.04}
-            cy={z + oz}
-            r={0.02}
-            fill={burnerStroke}
-          />
-        ))}
-      </g>
-    );
-  }
-
-  // 床: 与 3D Bed.tsx 同构 —— x=床长 size[2], 床头板立在 -x 端 (**床架外侧**),
-  // 所以平面图里床头板也必须画到床架外沿, 否则看不出"床头已经靠墙"。
-  // rotate(-rot): three 绕 Y 旋转与 SVG rotate 反向 (实测 rotY=+90 时局部 +X → 世界 -Z)
-  if (furniture.type === 'bed') {
-    const headT = 0.08;                       // 与 3D headT 同口径
-    const pillowW = 0.4;
-    const pillowH = 0.6;
-    const pillowX = x - localW / 2 + 0.35;    // 3D: -d/2 + 0.35
-    return (
-      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
-        {/* 床架 */}
-        <rect
-          x={x - localW / 2} y={z - localH / 2}
-          width={localW} height={localH}
-          fill={C.furnitureLight}
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-          rx={0.05}
-        />
-        {/* 被褥 (3D 偏 +x 0.1, 覆盖床尾) */}
-        <rect
-          x={x + 0.1 - (localW - 0.05) / 2} y={z - (localH - 0.15) / 2}
-          width={localW - 0.05} height={localH - 0.15}
-          fill={C.furniture}
-          stroke="none"
-          rx={0.04}
-        />
-        {/* 枕头 x2 — 靠床头, 长边沿 z (床宽方向) */}
-        {[-localH / 4, localH / 4].map((oz, i) => (
-          <rect
-            key={`pillow-${i}`}
-            x={pillowX - pillowW / 2} y={z + oz - pillowH / 2}
-            width={pillowW} height={pillowH}
-            fill={C.floor}
-            stroke={C.furnitureStroke}
-            strokeWidth={0.015}
-            rx={0.06}
-          />
-        ))}
-        {/* 床头板 — 床架外侧, 横跨床宽 (压深一档, 否则和被褥分不出来) */}
-        <rect
-          data-part="headboard"
-          x={x - localW / 2 - headT} y={z - localH / 2}
-          width={headT} height={localH}
-          fill="#c2c2c2"
-          stroke="#9e9e9e"
-          strokeWidth={0.015}
-          rx={0.02}
-        />
-      </g>
-    );
-  }
-
-
-  // 沙发: 圆角矩形 + 坐垫分隔
-  if (furniture.type === 'sofa') {
-    return (
-      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
-        <rect
-          x={x - localW / 2} y={z - localH / 2}
-          width={localW} height={localH}
-          fill={C.furniture}
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-          rx={0.08}
-        />
-        {/* 坐垫分隔线 */}
-        <line
-          x1={x - localW / 2 + localW * 0.15} y1={z}
-          x2={x + localW / 2 - localW * 0.15} y2={z}
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-          opacity={0.5}
-        />
-      </g>
-    );
-  }
-
-  // 桌子: 圆角矩形
-  if (furniture.type === 'table') {
-    return (
-      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
-        <rect
-          x={x - localW / 2} y={z - localH / 2}
-          width={localW} height={localH}
-          fill={C.furniture}
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-          rx={0.06}
-        />
-      </g>
-    );
-  }
-
-  // 椅子: 小圆角方形
-  if (furniture.type === 'chair') {
-    return (
-      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
-        <rect
-          x={x - localW / 2} y={z - localH / 2}
-          width={localW} height={localH}
-          fill={C.furniture}
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-          rx={0.08}
-        />
-      </g>
-    );
-  }
-
-  // 柜子: 矩形 + 内部分隔线; 高柜 (h>1.5, 衣柜) 用挂衣杆 + 衣架斜线
-  if (furniture.type === 'cabinet') {
-    // 与 3D Cabinet.tsx 的 isWardrobe 同口径 (h > 1.5)
-    const isWardrobe = furniture.size[1] > 1.5;
-
-    if (isWardrobe) {
-      // 衣柜: 挂衣杆画在进深正中, 衣架斜线横贯整个柜深 (背板侧 → 前缘侧),
-      // 挂衣杆从每根斜线的中点穿过 (经典 CAD 衣柜符号)。
-      // 3D 柜门朝局部 +X, 这里 rotate(-rot) 与 3D 同向 (理由同灶台: SVG rotate 与 three Y 旋转反向)
-      const backX = -localW / 2 + 0.04;           // 斜线起点距背板 0.04
-      const frontX = localW / 2 - 0.04;           // 斜线终点距前缘 0.04
-      const railHalf = localH / 2 - 0.08;
-      const n = Math.max(3, Math.round(localH / 0.25)); // 衣架数量按柜宽排布
-      const tilt = (frontX - backX) * 0.35 * 0.5; // 每半段斜移, 杆处正好是中点
-      return (
-        <g transform={`rotate(${-rot}, ${x}, ${z})`}>
-          <rect
-            x={x - localW / 2} y={z - localH / 2}
-            width={localW} height={localH}
-            fill={C.furniture}
-            stroke={C.furnitureStroke}
-            strokeWidth={0.02}
-            rx={0.03}
-          />
-          {/* 衣架斜线: 从背板侧到前缘侧, 关于杆对称, 钳制在柜体轮廓内 */}
-          {Array.from({ length: n + 1 }).map((_, i) => {
-            const zi = Math.max(
-              -railHalf + tilt,
-              Math.min(railHalf - tilt, -railHalf + 0.07 + (i * (2 * railHalf - 0.14)) / n)
-            );
-            return (
-              <line
-                key={i}
-                x1={x + backX} y1={z + zi + tilt}
-                x2={x + frontX} y2={z + zi - tilt}
-                stroke={C.textDim}
-                strokeWidth={0.025}
-                opacity={0.8}
-              />
-            );
-          })}
-          {/* 挂衣杆 (画在斜线之上, 从每根斜线中点穿过) */}
-          <line
-            x1={x} y1={z - railHalf}
-            x2={x} y2={z + railHalf}
-            stroke={C.textDim}
-            strokeWidth={0.035}
-          />
-        </g>
-      );
-    }
-
-    return (
-      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
-        <rect
-          x={x - localW / 2} y={z - localH / 2}
-          width={localW} height={localH}
-          fill={C.furniture}
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-          rx={0.03}
-        />
-        {/* 门板/抽屉分隔线 (竖向) */}
-        <line
-          x1={x} y1={z - localH / 2 + 0.05}
-          x2={x} y2={z + localH / 2 - 0.05}
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-          opacity={0.4}
-        />
-      </g>
-    );
-  }
-
-  // 马桶: 椭圆 + 水箱
-  if (furniture.type === 'toilet') {
-    return (
-      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
-        {/* 水箱 */}
-        <rect
-          x={x - localW / 2} y={z - localH / 2}
-          width={localW} height={localH * 0.35}
-          fill={C.furnitureLight}
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-          rx={0.03}
-        />
-        {/* 马桶座 */}
-        <ellipse
-          cx={x} cy={z + localH * 0.15}
-          rx={localW * 0.4} ry={localH * 0.3}
-          fill={C.furnitureLight}
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-        />
-      </g>
-    );
-  }
-
-  // 洗手台: 矩形 + 盆
-  if (furniture.type === 'sink') {
-    return (
-      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
-        <rect
-          x={x - localW / 2} y={z - localH / 2}
-          width={localW} height={localH}
-          fill={C.furnitureLight}
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-          rx={0.04}
-        />
-        {/* 盆 */}
-        <ellipse
-          cx={x} cy={z}
-          rx={localW * 0.3} ry={localH * 0.3}
-          fill={C.furniture}
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-        />
-      </g>
-    );
-  }
-
-  // 冰箱: 矩形 + 门缝
-  if (furniture.type === 'fridge') {
-    return (
-      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
-        <rect
-          x={x - localW / 2} y={z - localH / 2}
-          width={localW} height={localH}
-          fill={C.furnitureLight}
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-          rx={0.04}
-        />
-        {/* 上下门分隔 */}
-        <line
-          x1={x - localW / 2 + 0.03} y1={z}
-          x2={x + localW / 2 - 0.03} y2={z}
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-          opacity={0.5}
-        />
-      </g>
-    );
-  }
-
-  // 洗衣机: 矩形 + 圆形门
-  if (furniture.type === 'washer') {
-    return (
-      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
-        <rect
-          x={x - localW / 2} y={z - localH / 2}
-          width={localW} height={localH}
-          fill={C.furnitureLight}
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-          rx={0.04}
-        />
-        <circle
-          cx={x} cy={z}
-          r={Math.min(localW, localH) * 0.3}
-          fill="none"
-          stroke={C.furnitureStroke}
-          strokeWidth={0.02}
-        />
-      </g>
-    );
-  }
-
-  // 其他: 通用圆角矩形
   return (
-    <g transform={`rotate(${-rot}, ${x}, ${z})`}>
+    <g data-fid={furniture.id} data-ftype={furniture.type} opacity={dragging ? 0.2 : 1}>
+      <FurnitureSymbol2D furniture={furniture} />
+      {selected && !dragging && (
+        <g transform={`rotate(${-furniture.rotation}, ${x}, ${z})`}>
+          <rect
+            x={hitX - 0.05} y={hitY - 0.05}
+            width={hitW + 0.1} height={hitH + 0.1}
+            fill="none" stroke="#22c55e" strokeWidth={0.045} rx={0.05}
+            pointerEvents="none"
+          />
+          {!furniture.embedded && (
+            <g
+              style={{ cursor: 'pointer' }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                updateFurniture(furniture.id, {
+                  rotation: normalizeDeg(furniture.rotation + 90),
+                });
+              }}
+            >
+              <circle
+                cx={hitX + hitW + handleR * 0.9} cy={hitY - handleR * 0.9} r={handleR}
+                fill="#ffffff" stroke="#22c55e" strokeWidth={0.04}
+              />
+              <text
+                x={hitX + hitW + handleR * 0.9} y={hitY - handleR * 0.9}
+                textAnchor="middle" dominantBaseline="central"
+                fontSize={0.15} fontWeight={600} fill="#16a34a"
+                style={{ userSelect: 'none' }}
+              >
+                R
+              </text>
+            </g>
+          )}
+        </g>
+      )}
+    </g>
+  );
+}
+
+/**
+ * 放置预览 — 半透明符号 + 绿/红虚线框。
+ * 绿 = 校验通过 (松手落位); 红 = 压墙 / 压家具 / 出房间 (松手不落)。
+ */
+function PlacementGhost({ furniture, ok }: { furniture: Furniture; ok: boolean }) {
+  const [x, , z] = furniture.position;
+  const isShower = furniture.type === 'shower';
+  const { w, h } = footprintOf(furniture);
+  const gw = isShower ? furniture.size[0] : w;
+  const gh = isShower ? furniture.size[0] : h;
+  const gx = isShower ? x : x - gw / 2;
+  const gy = isShower ? z : z - gh / 2;
+  const color = ok ? '#22c55e' : '#ef4444';
+
+  return (
+    <g pointerEvents="none">
+      <g opacity={0.55}>
+        <FurnitureSymbol2D furniture={furniture} />
+      </g>
       <rect
-        x={x - localW / 2} y={z - localH / 2}
-        width={localW} height={localH}
-        fill={C.furniture}
-        stroke={C.furnitureStroke}
-        strokeWidth={0.02}
-        rx={0.05}
+        x={gx - 0.04} y={gy - 0.04}
+        width={gw + 0.08} height={gh + 0.08}
+        transform={`rotate(${-furniture.rotation}, ${x}, ${z})`}
+        fill={color} fillOpacity={0.08}
+        stroke={color} strokeWidth={0.04} strokeDasharray="0.12 0.06"
       />
     </g>
   );
 }
 
-/** 淋浴间 2D — 灰阶风格 */
-function Shower2D({ furniture }: { furniture: Furniture }) {
-  const [x, , z] = furniture.position;
-  const [w, , d] = furniture.size;
-  const rot = furniture.rotation;
-  const shape = furniture.shape ?? 'quarter';
-  const glassStroke = C.window;
-  const fill = C.furnitureLight;
+/* ==================== 拖拽辅助层 ==================== */
 
-  if (shape === 'quarter') {
-    const r = w;
-    return (
-      <g transform={`rotate(${-rot}, ${x}, ${z})`}>
-        <path
-          d={`M ${x} ${z} L ${x + r} ${z} A ${r} ${r} 0 0 1 ${x} ${z + r} Z`}
-          fill={fill}
-          stroke={glassStroke}
-          strokeWidth={0.04}
-        />
-        <path
-          d={`M ${x + r} ${z} A ${r} ${r} 0 0 1 ${x} ${z + r}`}
-          fill="none"
-          stroke={glassStroke}
-          strokeWidth={0.06}
-          strokeDasharray="0.08 0.06"
-        />
-        <circle cx={x + r * 0.4} cy={z + r * 0.4} r={0.06} fill={C.furnitureStroke} />
-      </g>
-    );
+const HUD = {
+  wall: '#22c55e',   // 贴墙吸附
+  align: '#f59e0b',  // 与其它家具对齐
+  dim: '#0ea5e9',    // 净距标注
+  font: 0.24,
+  tick: 0.075,
+};
+
+const mm = (m: number) => `${Math.round(m * 1000)}`;
+
+interface GapLine {
+  x1: number; y1: number; x2: number; y2: number;
+  lx: number; ly: number;
+  text: string;
+}
+
+/**
+ * 拖拽辅助层 —— 拖动/拖入过程中叠加在平面图上的量测信息。
+ *
+ *  1. 吸附辅助线: 贴墙=绿色实线(沿线覆盖家具所占墙段), 对齐=琥珀虚线(跨过两件家具)
+ *  2. 四向净距: 家具 AABB 四边到房间内墙面的距离, 带端线的标注线段 + 毫米读数
+ *     (与户型尺寸标注同口径, 都是 mm)
+ *  3. 落点十字: 标出吸附后的精确中心
+ *
+ * 全部 pointerEvents:none, 不抢 pointer 事件, 也不写 store —— 纯派生视图。
+ */
+function DragHUD({ hint }: { hint: DragHint }) {
+  const { hx, hz, cx, cz, guides, inner } = hint;
+  const l = cx - hx, r = cx + hx, t = cz - hz, b = cz + hz;
+
+  const gaps: GapLine[] = [];
+  if (inner) {
+    // 左右: 水平标注线, 数字压在线上方
+    if (l - inner.l > 0.005) {
+      gaps.push({ x1: inner.l, y1: cz, x2: l, y2: cz, lx: (inner.l + l) / 2, ly: cz - 0.17, text: mm(l - inner.l) });
+    }
+    if (inner.r - r > 0.005) {
+      gaps.push({ x1: r, y1: cz, x2: inner.r, y2: cz, lx: (r + inner.r) / 2, ly: cz - 0.17, text: mm(inner.r - r) });
+    }
+    // 上下: 垂直标注线, 数字放在线右侧
+    if (t - inner.t > 0.005) {
+      gaps.push({ x1: cx, y1: inner.t, x2: cx, y2: t, lx: cx + 0.22, ly: (inner.t + t) / 2, text: mm(t - inner.t) });
+    }
+    if (inner.b - b > 0.005) {
+      gaps.push({ x1: cx, y1: b, x2: cx, y2: inner.b, lx: cx + 0.22, ly: (b + inner.b) / 2, text: mm(inner.b - b) });
+    }
   }
 
-  const rw = w;
-  const rh = d;
   return (
-    <g transform={`rotate(${-rot}, ${x}, ${z})`}>
-      <rect
-        x={x} y={z} width={rw} height={rh}
-        fill={fill}
-        stroke={glassStroke}
-        strokeWidth={0.04}
-      />
-      <line
-        x1={x} y1={z + rh} x2={x + rw} y2={z + rh}
-        stroke={glassStroke}
-        strokeWidth={0.06}
-        strokeDasharray="0.08 0.06"
-      />
-      <line
-        x1={x + rw} y1={z} x2={x + rw} y2={z + rh}
-        stroke={glassStroke}
-        strokeWidth={0.06}
-        strokeDasharray="0.08 0.06"
-      />
-      <circle cx={x + rw * 0.3} cy={z + rh * 0.3} r={0.06} fill={C.furnitureStroke} />
+    <g pointerEvents="none">
+      {/* 吸附辅助线 */}
+      {guides.map((g, i) => {
+        const color = g.kind === 'wall' ? HUD.wall : HUD.align;
+        return g.axis === 'x' ? (
+          <line
+            key={`g${i}`}
+            x1={g.at} y1={g.from} x2={g.at} y2={g.to}
+            stroke={color}
+            strokeWidth={g.kind === 'wall' ? 0.055 : 0.03}
+            strokeDasharray={g.kind === 'align' ? '0.14 0.08' : undefined}
+            opacity={0.95}
+          />
+        ) : (
+          <line
+            key={`g${i}`}
+            x1={g.from} y1={g.at} x2={g.to} y2={g.at}
+            stroke={color}
+            strokeWidth={g.kind === 'wall' ? 0.055 : 0.03}
+            strokeDasharray={g.kind === 'align' ? '0.14 0.08' : undefined}
+            opacity={0.95}
+          />
+        );
+      })}
+
+      {/* 四向净距 */}
+      {gaps.map((g, i) => {
+        const horizontal = Math.abs(g.y1 - g.y2) < 1e-6;
+        return (
+          <g key={`gap${i}`}>
+            <line x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2} stroke={HUD.dim} strokeWidth={0.022} />
+            {horizontal ? (
+              <>
+                <line x1={g.x1} y1={g.y1 - HUD.tick} x2={g.x1} y2={g.y1 + HUD.tick} stroke={HUD.dim} strokeWidth={0.022} />
+                <line x1={g.x2} y1={g.y2 - HUD.tick} x2={g.x2} y2={g.y2 + HUD.tick} stroke={HUD.dim} strokeWidth={0.022} />
+              </>
+            ) : (
+              <>
+                <line x1={g.x1 - HUD.tick} y1={g.y1} x2={g.x1 + HUD.tick} y2={g.y1} stroke={HUD.dim} strokeWidth={0.022} />
+                <line x1={g.x2 - HUD.tick} y1={g.y2} x2={g.x2 + HUD.tick} y2={g.y2} stroke={HUD.dim} strokeWidth={0.022} />
+              </>
+            )}
+            <text
+              x={g.lx} y={g.ly}
+              textAnchor="middle" dominantBaseline="middle"
+              fontSize={HUD.font} fontWeight={600} fill={HUD.dim}
+              stroke="#ffffff" strokeWidth={0.09}
+              style={{ paintOrder: 'stroke', userSelect: 'none' }}
+            >
+              {g.text}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* 落点十字 */}
+      <g stroke={HUD.dim} strokeWidth={0.02} opacity={0.75}>
+        <line x1={cx - 0.12} y1={cz} x2={cx + 0.12} y2={cz} />
+        <line x1={cx} y1={cz - 0.12} x2={cx} y2={cz + 0.12} />
+      </g>
     </g>
   );
 }

@@ -8,6 +8,8 @@ import { Doors } from '../3D/indoor/building/Doors';
 import { Windows } from '../3D/indoor/building/Windows';
 import { BayWindows } from '../3D/indoor/building/BayWindow';
 import { FrenchWindows } from '../3D/indoor/building/FrenchWindow';
+import { WallLine, Door2D, Window2D, BayWindow2D, FrenchWindow2D } from '../2D/structureSymbol2D';
+import { setCustomDragImage } from './dragImage';
 
 /**
  * 建筑结构素材库 — 墙体 / 门 / 窗 / 飘窗 / 落地窗
@@ -17,8 +19,9 @@ import { FrenchWindows } from '../3D/indoor/building/FrenchWindow';
  * - 墙体: 默认沿 X 轴以落点为中心, 自动夹到房间范围内, 高度取层高
  * - 门 / 窗 / 飘窗 / 落地窗: 自动吸附到最近的墙面, 沿墙居中夹紧, 朝向自动对齐
  *
- * 缩略图: 复用全局隐藏 Canvas 离线捕获 (与家具素材库同一套机制),
- * 直接渲染真实的建筑组件, 因此素材长相与实际放置结果完全一致。
+ * 缩略图: 3D 模式下复用全局隐藏 Canvas 离线捕获 (与家具素材库同一套机制),
+ * 直接渲染真实的建筑组件; 平面图模式下改画 2D 符号 (structureSymbol2D),
+ * 与落到平面图里的图形同源。
  */
 
 /** 缩略图里使用的墙厚 (仅影响视觉, 与场景墙厚无关) */
@@ -130,14 +133,94 @@ function CatalogThumbnail({ tpl }: { tpl: StructureTemplate }) {
   );
 }
 
-/** 从卡片 DOM 中取缩略图 <img> 作为自定义拖拽影像 (与家具素材库一致) */
-function setCustomDragImage(e: React.DragEvent) {
-  const img = (e.currentTarget as HTMLElement).querySelector('img');
-  if (img && img.complete && img.naturalWidth > 0) {
-    try {
-      e.dataTransfer.setDragImage(img, Math.round(img.clientWidth / 2), Math.round(img.clientHeight / 2));
-    } catch {
-      // setDragImage 失败时回退浏览器默认快照
+/**
+ * 平面图模式下的结构素材预览 —— 用真实的 2D 符号组件画,
+ * 所以"卡上看到的样子"就是"落到平面图里的样子"。
+ *
+ * 预览几何都摆在原点上, 只为确定 viewBox; 门的开门弧线会向 -Z 甩出一整个门宽,
+ * 所以门卡片的取景框要比其它类型高一倍, 否则弧线被裁。
+ */
+function planPreviewBox(tpl: StructureTemplate) {
+  const [a, , c] = tpl.size;
+  switch (tpl.type) {
+    case 'wall':
+      return { x0: -a / 2, y0: -c / 2, x1: a / 2, y1: c / 2 };
+    case 'door':
+      return { x0: -a / 2, y0: -a, x1: a / 2, y1: 0 };
+    case 'window':
+      return { x0: -a / 2, y0: -c / 2, x1: a / 2, y1: c / 2 };
+    case 'bayWindow':
+      return { x0: -a / 2, y0: 0, x1: a / 2, y1: c };
+    case 'frenchWindow':
+      return { x0: -a / 2, y0: -0.1, x1: a / 2, y1: 0.1 };
+  }
+}
+
+function StructurePlanPreview({ tpl }: { tpl: StructureTemplate }) {
+  const box = planPreviewBox(tpl);
+  const w = box.x1 - box.x0;
+  const h = box.y1 - box.y0;
+  const pad = Math.max(w, h) * 0.1 + 0.03;
+
+  return (
+    <svg
+      viewBox={`${box.x0 - pad} ${box.y0 - pad} ${w + pad * 2} ${h + pad * 2}`}
+      preserveAspectRatio="xMidYMid meet"
+      style={{ width: '100%', height: '100%', display: 'block' }}
+    >
+      {planSymbol(tpl)}
+    </svg>
+  );
+}
+
+/** 按结构类型造一份只用于 2D 预览的假数据 (与 thumbScene 同参数) */
+function planSymbol(tpl: StructureTemplate) {
+  const [a, b, c] = tpl.size;
+  const id = `__plan-${tpl.id}`;
+  const wt = Math.min(c, 0.2);
+  switch (tpl.type) {
+    case 'wall': {
+      const seg: WallSegment = { id, start: [-a / 2, 0], end: [a / 2, 0], height: b };
+      return <WallLine wall={seg} thickness={c} windows={[]} />;
+    }
+    case 'door': {
+      const door: Door = {
+        id,
+        position: [0, 0, 0],
+        width: a,
+        height: b,
+        rotation: 0,
+        hingeSide: 'left',
+        style: tpl.style === 'glass' ? 'glass' : 'default',
+      };
+      return <Door2D door={door} wallThickness={wt} />;
+    }
+    case 'window': {
+      const win: WallWindow = {
+        id,
+        position: [0, 0, 0],
+        width: a,
+        height: b,
+        sill: tpl.sill ?? 0.9,
+        rotation: 0,
+        style: tpl.style === 'sliding' ? 'sliding' : 'default',
+      };
+      return <Window2D window={win} wallThickness={wt} />;
+    }
+    case 'bayWindow': {
+      const bay: BayWindow = {
+        id,
+        position: [0, tpl.sill ?? 0.9, 0],
+        width: a,
+        height: b,
+        depth: c,
+        rotation: 0,
+      };
+      return <BayWindow2D bayWindow={bay} wallThickness={wt} />;
+    }
+    case 'frenchWindow': {
+      const fw: FrenchWindow = { id, position: [0, 0, 0], width: a, height: b, rotation: 0 };
+      return <FrenchWindow2D frenchWindow={fw} wallThickness={wt} />;
     }
   }
 }
@@ -145,6 +228,7 @@ function setCustomDragImage(e: React.DragEvent) {
 export function StructureCatalog() {
   const setDraggingStructure = useAppStore((s) => s.setDraggingStructure);
   const setDraggingFurniture = useAppStore((s) => s.setDraggingFurniture);
+  const isPlan = useAppStore((s) => s.viewMode === 'plan');
 
   const handleDragStart = (e: React.DragEvent, tpl: StructureTemplate) => {
     // 与家具素材库互斥, 避免落下时被判成两种元素
@@ -160,7 +244,9 @@ export function StructureCatalog() {
       <div className="text-[10px] text-gray-400 mb-2 px-1 leading-relaxed">
         拖拽到设计区域放置
         <br />
-        <span className="text-gray-300">门窗会自动吸附到墙面上</span>
+        <span className="text-gray-300">
+          {isPlan ? '墙体门窗请切到 3D 视图拖入' : '门窗会自动吸附到墙面上'}
+        </span>
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         {STRUCTURE_CATALOG.map((tpl) => (
@@ -172,8 +258,8 @@ export function StructureCatalog() {
             className="flex flex-col bg-gray-50 hover:bg-gray-100 rounded-md cursor-grab active:cursor-grabbing transition-colors select-none overflow-hidden"
             title={`${tpl.name} ${tpl.size[0]}×${tpl.size[1]}m`}
           >
-            <div className="h-16 bg-gradient-to-br from-gray-50 to-gray-100">
-              <CatalogThumbnail tpl={tpl} />
+            <div className={`h-16 ${isPlan ? 'bg-white' : 'bg-gradient-to-br from-gray-50 to-gray-100'}`}>
+              {isPlan ? <StructurePlanPreview tpl={tpl} /> : <CatalogThumbnail tpl={tpl} />}
             </div>
             <div className="px-1 py-1 text-center">
               <span className="text-[9px] text-gray-600">{tpl.name}</span>

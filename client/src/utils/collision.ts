@@ -1,4 +1,5 @@
 import type { Furniture, OutdoorSceneData, Room, SceneData, WallSegment } from '../types';
+import { footprintXOf } from '../data/furnitureMeta';
 
 /**
  * 平面占位检测 (2D OBB + 分离轴定理)
@@ -142,18 +143,14 @@ function insideBounds(corners: [number, number][], bs: RectBound[]): boolean {
 /* ==================== 室内: 家具 / 墙体 ==================== */
 
 /**
- * 用 size[0] 作为局部 X 轴建模的素材 —— 与项目约定 (X = size[2], Z = size[0]) 相反。
- * Toilet: tankW = w*0.85 直接作为 boxGeometry 的 X; Chair: args=[w, seatT, d]。
- * 占位盒必须跟随各自的建模轴向, 否则贴墙摆放时会凭空"多占"十几厘米。
+ * 家具的局部 X 轴向例外 (toilet / chair) 现在写在 data/furnitureMeta.ts 里,
+ * 与 2D 符号、3D 缩略图共用同一份声明 —— 原来这里的 Set 是第三份副本。
  */
-const X_IS_SIZE0 = new Set<string>(['toilet', 'chair']);
-
-/** 家具占位盒 — 与 Furniture.tsx 的选中高亮盒完全一致 (含淋浴间特殊偏移) */
 export function furnitureObb(f: FurnitureLike, x?: number, z?: number): Obb2 {
   const px = x ?? 0;
   const pz = z ?? 0;
   const rot = f.rotation ?? 0;
-  const swap = X_IS_SIZE0.has(f.type);
+  const swap = footprintXOf(f.type) === 'size0';
   let hx = (swap ? f.size[0] : f.size[2]) / 2;
   let hz = (swap ? f.size[2] : f.size[0]) / 2;
   let ox = 0;

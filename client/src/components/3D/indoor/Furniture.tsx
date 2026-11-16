@@ -4,21 +4,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { findFurniture } from '../../../utils/sceneQuery';
 import { screenToFloor, findRoomAt } from '../../../utils/r3fBridge';
 import * as THREE from 'three';
-import { Bed } from './furniture/Bed';
-import { Sofa } from './furniture/Sofa';
-import { Table } from './furniture/Table';
-import { Cabinet } from './furniture/Cabinet';
-import { Appliance } from './furniture/Appliance';
-import { Refrigerator } from './furniture/Refrigerator';
-import { WashingMachine } from './furniture/WashingMachine';
-import { Decor } from './furniture/Decor';
-import { Chair } from './furniture/Chair';
-import { Shower } from './furniture/Shower';
-import { Sink } from './furniture/Sink';
-import { Toilet } from './furniture/Toilet';
-import { Stove } from './furniture/Stove';
-import { AirConditioner } from './furniture/AirConditioner';
-import { Curtain } from './furniture/Curtain';
+import { FurnitureContent3D } from './furnitureRegistry';
 
 interface FurnitureProps {
   items: Furniture[];
@@ -384,37 +370,5 @@ function FurnitureItem({ data, roomId, readOnly = false }: { data: Furniture; ro
 
 /** 按类型渲染家具本体 (不含选中高亮/交互), 供 FurnitureItem 与变换 ghost 复用 */
 export function FurnitureContent({ data }: { data: Furniture }) {
-  switch (data.type) {
-    case 'bed':
-      return <Bed data={data} />;
-    case 'sofa':
-      return <Sofa data={data} />;
-    case 'table':
-      return <Table data={data} />;
-    case 'cabinet':
-      return <Cabinet data={data} />;
-    case 'appliance':
-      return <Appliance data={data} />;
-    case 'fridge':
-      return <Refrigerator data={data} />;
-    case 'washer':
-      return <WashingMachine data={data} />;
-    case 'chair':
-      return <Chair data={data} />;
-    case 'shower':
-      return <Shower data={data} />;
-    case 'sink':
-      return <Sink data={data} />;
-    case 'toilet':
-      return <Toilet data={data} />;
-    case 'stove':
-      return <Stove data={data} />;
-    case 'ac':
-      return <AirConditioner data={data} />;
-    case 'curtain':
-      return <Curtain data={data} />;
-    case 'decor':
-    default:
-      return <Decor data={data} />;
-  }
+  return <FurnitureContent3D data={data} />;
 }
