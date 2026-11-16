@@ -4,19 +4,8 @@ import {
   requestThumbnail,
   useThumbnailUrl,
 } from '../../utils/thumbnailCapture';
-import { Bed } from '../3D/indoor/furniture/Bed';
-import { Sofa } from '../3D/indoor/furniture/Sofa';
-import { Table } from '../3D/indoor/furniture/Table';
-import { Cabinet } from '../3D/indoor/furniture/Cabinet';
-import { Chair } from '../3D/indoor/furniture/Chair';
-import { Refrigerator } from '../3D/indoor/furniture/Refrigerator';
-import { WashingMachine } from '../3D/indoor/furniture/WashingMachine';
-import { Toilet } from '../3D/indoor/furniture/Toilet';
-import { Sink } from '../3D/indoor/furniture/Sink';
-import { Shower } from '../3D/indoor/furniture/Shower';
-import { Stove } from '../3D/indoor/furniture/Stove';
-import { Appliance } from '../3D/indoor/furniture/Appliance';
-import { Decor } from '../3D/indoor/furniture/Decor';
+// 家具 3D 分派统一走注册表出口 (furnitureRegistry → elements/indoor/furniture)
+import { FurnitureContent3D } from '../3D/indoor/furnitureRegistry';
 import { mockSceneData, oneBedroomScene, twoBedroomScene, modernApartmentScene, getOfficeScene } from '../../data/mockScene';
 import { getOutdoorSceneForModel } from '../../data/outdoorScene';
 import type { GroundItem, OutdoorObject, OutdoorSceneData } from '../../types';
@@ -110,25 +99,6 @@ export function ModelThumbnail({ item }: { item: ModelItem }) {
   );
 }
 
-function renderFurniture(data: Furniture) {
-  switch (data.type) {
-    case 'bed': return <Bed data={data} />;
-    case 'sofa': return <Sofa data={data} />;
-    case 'table': return <Table data={data} />;
-    case 'cabinet': return <Cabinet data={data} />;
-    case 'chair': return <Chair data={data} />;
-    case 'fridge': return <Refrigerator data={data} />;
-    case 'washer': return <WashingMachine data={data} />;
-    case 'toilet': return <Toilet data={data} />;
-    case 'sink': return <Sink data={data} />;
-    case 'shower': return <Shower data={data} />;
-    case 'stove': return <Stove data={data} />;
-    case 'appliance': return <Appliance data={data} />;
-    case 'decor': return <Decor data={data} />;
-    default: return <Decor data={data} />;
-  }
-}
-
 /** 家具预览 */
 function FurniturePreview({ item }: { item: ModelItem }) {
   const furnitureData: Furniture = useMemo(() => ({
@@ -157,7 +127,7 @@ function FurniturePreview({ item }: { item: ModelItem }) {
       </mesh>
 
       <group position={[0, -h / 2, 0]}>
-        {renderFurniture(furnitureData)}
+        <FurnitureContent3D data={furnitureData} />
       </group>
     </>
   );

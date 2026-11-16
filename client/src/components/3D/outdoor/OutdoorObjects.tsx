@@ -2,19 +2,16 @@ import * as THREE from 'three';
 import type { OutdoorObject } from '../../../types';
 import { useAppStore } from '../../../store/useAppStore';
 import { useOutdoorPalette, type OutdoorPalette } from '../../../constants/outdoorStyles';
-import { GlassBuilding } from './objects/GlassBuilding';
-import { Warehouse } from './objects/Warehouse';
-import { Car } from './objects/Car';
-import { Truck } from './objects/Truck';
-import { Tree } from './objects/Tree';
-import { SchoolBuilding } from './objects/SchoolBuilding';
-import { Gate } from './objects/Gate';
-import { GuardBooth } from './objects/GuardBooth';
+import { getOutdoorObjectElement } from '../../../elements/outdoor/objects';
+import { Warehouse } from '../../../elements/outdoor/objects/warehouse/View3D';
 
 /** 拾取代理相对占地的外扩容差 (米): 吸收鼠标落点偏差, 不改变碰撞与高亮尺寸 */
 const PICK_PAD = 0.04;
 
-/** 空间对象本体 (无外层定位, 用于场景渲染和缩略图) */
+/**
+ * 空间对象本体 (无外层定位, 用于场景渲染和缩略图)
+ * 内容分派走 elements/outdoor/objects 注册表。
+ */
 export function OutdoorObjectContent({
   data,
   palette,
@@ -22,28 +19,10 @@ export function OutdoorObjectContent({
   data: OutdoorObject;
   palette: OutdoorPalette;
 }) {
-  switch (data.type) {
-    case 'building':
-      return <GlassBuilding data={data} palette={palette} />;
-    case 'warehouse':
-      return <Warehouse data={data} palette={palette} />;
-    case 'car':
-      return <Car data={data} palette={palette} />;
-    case 'truck':
-      return <Truck data={data} palette={palette} />;
-    case 'tree':
-      return <Tree data={data} palette={palette} />;
-    case 'teaching-building':
-    case 'lab-building':
-    case 'dormitory':
-      return <SchoolBuilding data={data} palette={palette} />;
-    case 'gate':
-      return <Gate data={data} palette={palette} />;
-    case 'guard-booth':
-      return <GuardBooth data={data} palette={palette} />;
-    default:
-      return <Warehouse data={data} palette={palette} />;
-  }
+  const el = getOutdoorObjectElement(data.type);
+  if (!el) return <Warehouse data={data} palette={palette} />;
+  const View3D = el.View3D;
+  return <View3D data={data} palette={palette} />;
 }
 
 /** 单个空间对象 — 定位/旋转/选中/锁定 */

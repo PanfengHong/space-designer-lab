@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { useMemo } from 'react';
-import { ContentProps } from '../GroundItems';
+import type { ContentProps } from '../../types';
 
 interface CurvePoint { x: number; y: number; z: number; tangent: [number, number, number]; }
 

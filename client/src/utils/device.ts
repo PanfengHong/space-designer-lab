@@ -1,5 +1,5 @@
 import type { DeviceConfig, FurnitureType } from '../types';
-import { metaOf } from '../data/furnitureMeta';
+import { metaOf } from '../elements/indoor/furniture/metas';
 
 /**
  * 按素材类型推断设备身份 —— 从素材库拖入的物件要自动带 device 声明,

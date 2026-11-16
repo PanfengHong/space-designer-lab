@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
-import { ContentProps } from '../GroundItems';
+import type { ContentProps } from '../../types';
 
 /** 道路 — 灰蓝路面 + 白色边线 + 虚线车道 + 高架桥墩 */
 export function Road({ data, palette }: ContentProps) {

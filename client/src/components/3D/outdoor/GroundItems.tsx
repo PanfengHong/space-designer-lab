@@ -1,26 +1,21 @@
-import { useMemo, useRef } from 'react';
 import { extend } from '@react-three/fiber';
-import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { GroundItem } from '../../../types';
 import { useAppStore } from '../../../store/useAppStore';
 import { useOutdoorPalette } from '../../../constants/outdoorStyles';
-import { Road } from './ground/Road';
-import { River } from './ground/River';
-import { Grass } from './ground/Grass';
-import { Intersection } from './ground/Intersection';
-import { Ramp } from './ground/Ramp';
-import { Fence } from './ground/Fence';
-import { Playground } from './ground/Playground';
+import { getGroundElement } from '../../../elements/outdoor/ground';
+import { GroundSlab } from '../../../elements/outdoor/ground/ground/View3D';
 
 extend({ RoundedBoxGeometry });
 
 /**
- * 地面结构层 — 地面 / 草地 / 河流 / 道路
+ * 地面结构层 — 地面 / 草地 / 河流 / 道路 / 路口 / 匝道 / 围墙 / 操场
  *
  * 元素约定: position=[x,y,z] 中心; size=[X长, 厚度, Z宽]; 绕Y旋转
  * 道路 position.y > 0.5 时自动生成混凝土桥墩 (高架道路)
+ *
+ * 内容分发走 elements/outdoor/ground 注册表, 本文件只负责「选中/锁定/高亮」这层外壳。
  */
 
 export interface ContentProps {
@@ -28,37 +23,12 @@ export interface ContentProps {
   palette: ReturnType<typeof useOutdoorPalette>;
 }
 
-/** 地面基座 — 白色大平台 */
-function GroundSlab({ data, palette }: ContentProps) {
-  const [w, h, d] = data.size;
-  return (
-    <group>
-      <mesh receiveShadow castShadow>
-        <roundedBoxGeometry args={[w, h, d, 3, 0.08]} />
-        <meshStandardMaterial color={palette.ground} roughness={0.9} />
-      </mesh>
-      {/* 外轮廓浅描边 */}
-      <lineSegments>
-        <edgesGeometry args={[new THREE.BoxGeometry(w * 1.002, h * 1.002, d * 1.002)]} />
-        <lineBasicMaterial color={palette.edge} />
-      </lineSegments>
-    </group>
-  );
-}
-
 /** 地面元素本体 (无外层定位, 用于场景渲染和缩略图) */
 export function GroundItemContent({ data, palette }: ContentProps) {
-  switch (data.type) {
-    case 'ground': return <GroundSlab data={data} palette={palette} />;
-    case 'grass': return <Grass data={data} palette={palette} />;
-    case 'river': return <River data={data} palette={palette} />;
-    case 'road': return <Road data={data} palette={palette} />;
-    case 'intersection': return <Intersection data={data} palette={palette} />;
-    case 'ramp': return <Ramp data={data} palette={palette} />;
-    case 'fence': return <Fence data={data} palette={palette} />;
-    case 'playground': return <Playground data={data} palette={palette} />;
-    default: return <GroundSlab data={data} palette={palette} />;
-  }
+  const el = getGroundElement(data.type);
+  if (!el) return <GroundSlab data={data} palette={palette} />;
+  const View3D = el.View3D;
+  return <View3D data={data} palette={palette} />;
 }
 
 /** 单个地面元素 — 定位/旋转/选中/锁定 */

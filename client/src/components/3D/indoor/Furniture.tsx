@@ -29,6 +29,8 @@ interface FurnitureProps {
  * 实心代理盒已经盖住了, 根本不需要外扩。本体 mesh 自己也会参与射线, 边缘不会丢。
  */
 const PICK_INSET = 0.005;
+/** 内嵌薄件的拾取代理最小高度 (米): 灶台台面板只有 8cm, 太薄会点不中 */
+const PICK_MIN_H = 0.14;
 
 /**
  * 拾取代理 / 高亮框的统一标记。
@@ -243,9 +245,10 @@ function FurnitureItem({ data, roomId, readOnly = false }: { data: Furniture; ro
     selectDevice(target.device ? target.id : null);
     // 左键按下即进入"移动"会话: 拖动时由 FurnitureTransformController 的 ghost 本体
     // 实时跟随指针 (直接写 three 对象, 不经过 React), 松手才落位 —— 只产生一条历史。
-    // 内嵌件 (灶台/水槽嵌在台面里) 不参与移动: 其占地本就落在母体柜内, 一动必判重叠。
+    // 内嵌件 (灶台/水槽嵌在台面里) 也一样可拖: 落点校验对它们跳过家具互压
+    // (见 collision.checkIndoorPlacement), 所以停在台面上不会被判"与橱柜重叠"。
     // 循环切换那一次只做"选中", 不进移动会话 —— 用户是在挑被挡住的那件, 不是要拖它。
-    if (e.button === 0 && !target.embedded && !pick.cycled) {
+    if (e.button === 0 && !pick.cycled) {
       beginTransform(target.id, 'move', e.clientX, e.clientY);
     }
   };
@@ -310,6 +313,22 @@ function FurnitureItem({ data, roomId, readOnly = false }: { data: Furniture; ro
     rotation: [0, (data.rotation * Math.PI) / 180, 0] as [number, number, number],
   };
 
+  /**
+   * 拾取代理尺寸 —— 内嵌的薄件要补厚。
+   * 灶台本体就是一块 8cm 厚的台面板, 若只按真实包围盒做代理, 在 3D 里几乎点不中,
+   * 表现成"选不到、也拖不动"。这里给它补到 14cm 且底面对齐, 点击面就够用了。
+   * 非内嵌件仍严格按真实包围盒 (只内缩 5mm, 不外扩 —— 外扩会在物体旁边造出幽灵区)。
+   */
+  const pickBox = bounds
+    ? (() => {
+        const sx = Math.max(0.01, bounds.sx - PICK_INSET * 2);
+        const sz = Math.max(0.01, bounds.sz - PICK_INSET * 2);
+        const rawSy = Math.max(0.01, bounds.sy - PICK_INSET * 2);
+        const sy = Math.max(rawSy, data.embedded ? PICK_MIN_H : 0);
+        return { sx, sy, sz, cy: bounds.cy + (sy - rawSy) / 2 };
+      })()
+    : null;
+
   return (
     <group
       visible={!isTransformTarget}
@@ -326,20 +345,15 @@ function FurnitureItem({ data, roomId, readOnly = false }: { data: Furniture; ro
           点在缝隙里会漏选, 并继续命中后面的地板或邻件 —— 表现为「点不准 / 点到旁边的」。
           尺寸来自真实几何包围盒 (measureBounds), 因此不受各素材组件 size 轴向差异影响;
           并且只内缩不外扩 —— 外扩会在物体旁边造出"点空处选中"的幽灵区。
-          内嵌件 (灶台/水槽/电视嵌在柜内) 不加: 命中区与母体重叠, 代理会抢走母体的点击。 */}
-      {!data.embedded && bounds && (
+          内嵌件 (灶台/水槽/电视) 同样需要代理: 它们也允许选中与拖动, 少了代理就只能
+          点在薄板三角面上, 基本点不中; 与母体柜重叠时由 resolvePick 的连点循环切换。 */}
+      {bounds && pickBox && (
         <group {...placement}>
           <mesh
-            position={[bounds.cx, bounds.cy, bounds.cz]}
+            position={[bounds.cx, pickBox.cy, bounds.cz]}
             userData={{ pickKind: PICK_FURNITURE, pickId: data.id, pickRoomId: roomId }}
           >
-            <boxGeometry
-              args={[
-                Math.max(0.01, bounds.sx - PICK_INSET * 2),
-                Math.max(0.01, bounds.sy - PICK_INSET * 2),
-                Math.max(0.01, bounds.sz - PICK_INSET * 2),
-              ]}
-            />
+            <boxGeometry args={[pickBox.sx, pickBox.sy, pickBox.sz]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
           </mesh>
         </group>

@@ -6,7 +6,7 @@ import { screenToFloor, snapToGrid } from '../../../utils/r3fBridge';
 import { checkIndoorPlacement, type IndoorColliders } from '../../../utils/collision';
 import { findFurniture, normalizeDeg } from '../../../utils/sceneQuery';
 import { FurnitureContent } from './Furniture';
-import { footprintXOf } from '../../../data/furnitureMeta';
+import { footprintXOf } from '../../../elements/indoor/furniture/metas';
 import type { Furniture } from '../../../types';
 
 /** 旋转手柄拖动时的角度吸附步长 (度) */
@@ -271,7 +271,8 @@ export function FurnitureTransformController({ colliders }: { colliders: IndoorC
   }, [session, target, colliders, controls, updateFurniture, endTransform, gl]);
 
   const showGhost = !!(session && target && footprint && ghostData);
-  const showHandle = !!selected && !selected.embedded && !session && !!handleFootprint;
+  // 内嵌件 (灶台/水槽) 也给旋转手柄: 它们允许拖动, 手柄不该只剩一半
+  const showHandle = !!selected && !session && !!handleFootprint;
 
   return (
     <>

@@ -18,7 +18,6 @@ import { OutdoorScene } from '../3D/outdoor/OutdoorScene';
 import { FloorPlan2D } from '../2D/FloorPlan2D';
 import { OutdoorPlan2D } from '../2D/OutdoorPlan2D';
 import { LIGHTING_OPTIONS, LIGHTING_ICONS } from '../../constants/lighting';
-import { FLOOR_MATERIALS, FLOOR_MATERIAL_ORDER, defaultFloorForRoom } from '../../data/floorMaterials';
 import { OUTDOOR_STYLE_OPTIONS } from '../../constants/outdoorStyles';
 import { useDesignerShortcuts } from '../../hooks/useDesignerShortcuts';
 import { PerformanceMonitor } from '../panel/PerformanceMonitor';
@@ -26,35 +25,24 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { DevicePanel } from '../ui/DevicePanel';
 import { Toolbar, UndoRedoButtons } from './Toolbar';
 import { ExportModelButton } from './ExportPanel';
+import { PropRow, SettingToggle } from '../ui/PropertyControls';
 import {
-  ColorRow,
-  PositionRows,
-  PropRow,
-  RotationControl,
-  SettingToggle,
-  SizeRows,
-  StepperRow,
-  ToggleRow,
-} from '../ui/PropertyControls';
+  CommonFurnitureRows,
+  CommonStructureRows,
+  CommonOutdoorRows,
+  resolveStructure,
+  getFurnitureElement,
+  getStructureElement,
+  getGroundElement,
+  getOutdoorObjectElement,
+  type StructureFamily,
+} from '../../elements';
 import type { Furniture } from '../../types';
 
 /** 室内视角预设 */
 const INTERIOR_PRESETS = ['整体', '自由视角', '客厅', '厨房', '卧室'];
 /** 户外视角预设 */
 const OUTDOOR_PRESETS = ['整体', '高架道路', '建筑组团', '南门入口'];
-
-const GROUND_TYPE_LABEL: Record<string, string> = {
-  ground: '地面',
-  grass: '草地',
-  river: '河流',
-  road: '道路',
-};
-const OBJECT_TYPE_LABEL: Record<string, string> = {
-  building: '玻璃建筑',
-  warehouse: '厂房仓库',
-  car: '轿车',
-  truck: '卡车',
-};
 
 /** 设备类型中文名 (家具属性面板里的"设备控制"按钮用) */
 const DEVICE_KIND_LABEL: Record<string, string> = {
@@ -410,6 +398,10 @@ function FurniturePanel() {
     : null;
   if (!item) return null;
 
+  const update = (patch: Partial<Furniture>) => updateFurniture(item.id, patch);
+  // 元素自定义配置 (如淋浴间形状) 由元素目录提供; 通用字段统一走 CommonFurnitureRows
+  const Config = getFurnitureElement(item.type)?.Config;
+
   return (
     <PropertyCard title="家具属性" onClose={() => selectFurniture(null)}>
       {/* 带设备身份的家具: 给一个入口, 避免在 3D 里点不中设备时无从操作 */}
@@ -421,93 +413,12 @@ function FurniturePanel() {
           <Power size={12} /> 设备控制 · {DEVICE_KIND_LABEL[item.device.kind] ?? '设备'}
         </button>
       )}
-      <PropRow label="名称" value={item.name} />
-      <PropRow label="类型" value={item.type} />
 
-      {/* 位置 X/Z */}
-      <div className="space-y-1.5 pt-1 border-t border-gray-100">
-        <div className="text-[10px] text-gray-400 font-medium pt-1">位置</div>
-        <StepperRow
-          label="X"
-          value={item.position[0]}
-          step={0.1}
-          min={-15}
-          max={15}
-          onChange={(v) =>
-            updateFurniture(item.id, { position: [v, item.position[1], item.position[2]] })
-          }
-        />
-        <StepperRow
-          label="Z"
-          value={item.position[2]}
-          step={0.1}
-          min={-15}
-          max={15}
-          onChange={(v) =>
-            updateFurniture(item.id, { position: [item.position[0], item.position[1], v] })
-          }
-        />
-      </div>
+      {/* 通用配置 (名称/位置/旋转/尺寸/颜色) */}
+      <CommonFurnitureRows item={item} update={update} />
 
-      {/* 旋转 */}
-      <div className="space-y-1.5 pt-1.5 border-t border-gray-100">
-        <RotationControl
-          value={item.rotation}
-          onChange={(v) => updateFurniture(item.id, { rotation: Math.round(v) })}
-        />
-      </div>
-
-      {/* 尺寸 (长×高×宽) */}
-      <div className="space-y-1.5 pt-1.5 border-t border-gray-100">
-        <div className="text-[10px] text-gray-400 font-medium pt-1">尺寸 (长×高×宽)</div>
-        <StepperRow
-          label="长 (D)"
-          value={item.size[0]}
-          step={0.05}
-          min={0.1}
-          max={10}
-          onChange={(v) => updateFurniture(item.id, { size: [v, item.size[1], item.size[2]] })}
-        />
-        <StepperRow
-          label="高 (H)"
-          value={item.size[1]}
-          step={0.05}
-          min={0.1}
-          max={5}
-          onChange={(v) => updateFurniture(item.id, { size: [item.size[0], v, item.size[2]] })}
-        />
-        <StepperRow
-          label="宽 (W)"
-          value={item.size[2]}
-          step={0.05}
-          min={0.1}
-          max={10}
-          onChange={(v) => updateFurniture(item.id, { size: [item.size[0], item.size[1], v] })}
-        />
-      </div>
-
-      {/* 颜色 */}
-      <div className="space-y-1.5 pt-1.5 border-t border-gray-100">
-        <ColorRow
-          label="颜色"
-          value={item.color}
-          onChange={(v) => updateFurniture(item.id, { color: v })}
-        />
-      </div>
-
-      {item.shape && (
-        <div className="pt-1.5 border-t border-gray-100">
-          <ToggleRow
-            label="形状"
-            options={[
-              { label: '长方形', value: 'rect' },
-              { label: '四分之一圆', value: 'quarter' },
-            ]}
-            value={item.shape}
-            onChange={(v) => updateFurniture(item.id, { shape: v as 'rect' | 'quarter' })}
-          />
-        </div>
-      )}
+      {/* 元素自定义配置 */}
+      {Config && <Config data={item} update={update} />}
 
       {/* 操作 */}
       <div className="pt-2 border-t border-gray-100 flex items-center gap-1.5">
@@ -536,100 +447,6 @@ function FurniturePanel() {
   );
 }
 
-/** 把 selector "type:roomId:id" 解析成可直接渲染的属性模型 */
-function resolveStructure(selector: string | null, sceneData: ReturnType<typeof useAppStore.getState>['sceneData']) {
-  if (!selector) return null;
-  const [type, roomId, id] = selector.split(':');
-  const room = sceneData.rooms.find((r) => r.id === roomId);
-  if (!room) return null;
-
-  if (type === 'floor') {
-    const xs = room.walls.flatMap((w) => [w.start[0], w.end[0]]);
-    const zs = room.walls.flatMap((w) => [w.start[1], w.end[1]]);
-    const w = Math.max(...xs) - Math.min(...xs);
-    const d = Math.max(...zs) - Math.min(...zs);
-    return {
-      type: '地板',
-      name: `${room.name} 地板`,
-      id: room.id,
-      position: null,
-      size: null,
-      extra: {
-        width: w,
-        depth: d,
-        floorThickness: sceneData.floorThickness,
-        floorHeight: room.floorHeight,
-        ceilingHeight: sceneData.ceilingHeight,
-        // 未手动指定时按空间类型派生 (卧室木地板 / 厨卫地砖), 面板里如实标出来源
-        floorMaterial: room.floorMaterial ?? defaultFloorForRoom(room),
-        floorMaterialAuto: room.floorMaterial == null,
-      } as Record<string, unknown>,
-    };
-  }
-  if (type === 'wall') {
-    const seg = room.walls.find((w) => w.id === id);
-    if (!seg) return null;
-    const len = Math.sqrt((seg.end[0] - seg.start[0]) ** 2 + (seg.end[1] - seg.start[1]) ** 2);
-    return {
-      type: '墙体',
-      name: `${room.name} ${seg.id}`,
-      id: seg.id,
-      position: null,
-      size: null,
-      extra: { length: len, start: seg.start, end: seg.end, height: seg.height } as Record<string, unknown>,
-    };
-  }
-  if (type === 'door') {
-    const d = room.doors.find((x) => x.id === id);
-    if (!d) return null;
-    return {
-      type: '门',
-      name: `${room.name} ${d.id}`,
-      id: d.id,
-      position: d.position,
-      size: [d.width, d.height] as number[],
-      extra: { rotation: d.rotation ?? 0, openInward: d.openInward, hingeSide: d.hingeSide ?? 'left' } as Record<string, unknown>,
-    };
-  }
-  if (type === 'window') {
-    const w = room.windows.find((x) => x.id === id);
-    if (!w) return null;
-    return {
-      type: '窗',
-      name: `${room.name} ${w.id}`,
-      id: w.id,
-      position: w.position,
-      size: [w.width, w.height] as number[],
-      extra: { rotation: w.rotation ?? 0, style: w.style } as Record<string, unknown>,
-    };
-  }
-  if (type === 'bay') {
-    const b = (room.bayWindows ?? []).find((x) => x.id === id);
-    if (!b) return null;
-    return {
-      type: '飘窗',
-      name: `${room.name} ${b.id}`,
-      id: b.id,
-      position: b.position,
-      size: [b.width, b.height, b.depth] as number[],
-      extra: { rotation: b.rotation ?? 0 } as Record<string, unknown>,
-    };
-  }
-  if (type === 'french') {
-    const f = (room.frenchWindows ?? []).find((x) => x.id === id);
-    if (!f) return null;
-    return {
-      type: '落地窗',
-      name: `${room.name} ${f.id}`,
-      id: f.id,
-      position: f.position,
-      size: [f.width, f.height] as number[],
-      extra: { rotation: f.rotation ?? 0 } as Record<string, unknown>,
-    };
-  }
-  return null;
-}
-
 function StructurePanel() {
   const selectedStructureId = useAppStore((s) => s.selectedStructureId);
   const sceneData = useAppStore((s) => s.sceneData);
@@ -641,16 +458,22 @@ function StructurePanel() {
   const st = resolveStructure(selectedStructureId, sceneData);
   if (!st || !selectedStructureId) return null;
 
-  // 属性条目是异构联合, 各字段有的是 number 有的是 string/数组, 统一放宽为 any 供 JSX 渲染
-  const extra = st.extra as Record<string, any>;
-  const isFloor = st.type === '地板';
+  const [kind, roomId, id] = selectedStructureId.split(':');
+  const room = sceneData.rooms.find((r) => r.id === roomId);
+  const el = getStructureElement(kind as StructureFamily);
+  const Config = el?.Config;
+  const update = (patch: Record<string, unknown>) => updateStructure(selectedStructureId, patch);
+
+  // 元素自定义配置的入参 (门/窗需要完整实体, 地板需要房间 + 场景参数)
+  const door = kind === 'door' ? room?.doors.find((x) => x.id === id) : undefined;
+  const win = kind === 'window' ? room?.windows.find((x) => x.id === id) : undefined;
 
   return (
     <PropertyCard
       title="建筑结构属性"
       onClose={() => selectStructure(null)}
       onDelete={
-        selectedStructureId.startsWith('floor:')
+        kind === 'floor'
           ? undefined
           : () =>
             requestDeleteConfirm(
@@ -663,355 +486,18 @@ function StructurePanel() {
       <PropRow label="类型" value={st.type} />
       <PropRow label="名称" value={st.name} />
 
-      {/* 地板 */}
-      {isFloor && (
-        <>
-          <div className="space-y-1.5 pt-1.5 border-t border-gray-100">
-            <div className="text-[10px] text-gray-400 font-medium pt-1">尺寸 (宽×深)</div>
-            <PropRow label="宽" value={`${(extra.width as number).toFixed(2)} m`} />
-            <PropRow label="深" value={`${(extra.depth as number).toFixed(2)} m`} />
-          </div>
-          <div className="space-y-1.5 pt-1.5 border-t border-gray-100">
-            <div className="text-[10px] text-gray-400 font-medium pt-1">地板参数</div>
-            <StepperRow
-              label="板厚"
-              value={extra.floorThickness as number}
-              step={0.05}
-              min={0.05}
-              max={0.5}
-              onChange={(v) => updateStructure(selectedStructureId, { floorThickness: v })}
-            />
-            <StepperRow
-              label="地板高度"
-              value={extra.floorHeight as number}
-              step={0.05}
-              min={0}
-              max={2}
-              onChange={(v) => updateStructure(selectedStructureId, { floorHeight: v })}
-            />
-            <StepperRow
-              label="层高"
-              value={extra.ceilingHeight as number}
-              step={0.1}
-              min={2}
-              max={4}
-              onChange={(v) => updateStructure(selectedStructureId, { ceilingHeight: v })}
-            />
-          </div>
-
-          {/* 地面材质 — 每间房各自一份, 未指定时按空间类型派生 */}
-          <div className="space-y-2 pt-1.5 border-t border-gray-100">
-            <div className="flex items-center gap-2">
-              <div className="text-[10px] text-gray-400 font-medium pt-1">地板材质</div>
-              {extra.floorMaterialAuto ? (
-                <span className="ml-auto text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
-                  按空间类型自动
-                </span>
-              ) : (
-                <button
-                  onClick={() => updateStructure(selectedStructureId, { floorMaterial: undefined })}
-                  className="ml-auto text-[9px] text-gray-400 hover:text-gray-600 transition-colors"
-                  title="清除手动指定, 恢复按空间类型匹配"
-                >
-                  恢复自动
-                </button>
-              )}
-            </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              {FLOOR_MATERIAL_ORDER.map((mid) => {
-                const m = FLOOR_MATERIALS[mid];
-                const active = extra.floorMaterial === mid;
-                return (
-                  <button
-                    key={mid}
-                    onClick={() => updateStructure(selectedStructureId, { floorMaterial: mid })}
-                    title={`${m.label} · ${m.hint}`}
-                    className={`rounded-md border p-1 text-left transition-colors ${
-                      active
-                        ? 'border-emerald-400 bg-emerald-50/70'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span
-                      className="block h-6 rounded-[3px] mb-1 border border-black/5"
-                      style={{ backgroundColor: m.swatch }}
-                    />
-                    <span
-                      className={`block text-[10px] leading-tight ${
-                        active ? 'text-emerald-700 font-medium' : 'text-gray-500'
-                      }`}
-                    >
-                      {m.short}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="text-[9px] text-gray-400 leading-relaxed">
-              {FLOOR_MATERIALS[extra.floorMaterial as keyof typeof FLOOR_MATERIALS]?.hint ?? ''}
-            </div>
-          </div>
-        </>
+      {/* 地板: 板厚/层高/地面材质 (元素自定义配置) */}
+      {kind === 'floor' && room && Config && (
+        <Config room={room} sceneData={sceneData} update={update} />
       )}
 
-      {/* 位置 (门窗类) */}
-      {st.position && (
-        <div className="space-y-1.5 pt-1 border-t border-gray-100">
-          <div className="text-[10px] text-gray-400 font-medium pt-1">位置</div>
-          <StepperRow
-            label="X"
-            value={st.position[0]}
-            step={0.1}
-            min={-15}
-            max={15}
-            onChange={(v) =>
-              updateStructure(selectedStructureId, {
-                position: [v, st.position![1], st.position![2]],
-              })
-            }
-          />
-          <StepperRow
-            label="Z"
-            value={st.position[2]}
-            step={0.1}
-            min={-15}
-            max={15}
-            onChange={(v) =>
-              updateStructure(selectedStructureId, {
-                position: [st.position![0], st.position![1], v],
-              })
-            }
-          />
-        </div>
-      )}
+      {/* 其余结构: 位置/尺寸/墙体几何/旋转 (通用配置) */}
+      {kind !== 'floor' && <CommonStructureRows st={st} update={update} />}
 
-      {/* 尺寸 */}
-      {st.size && (
-        <div className="space-y-1.5 pt-1.5 border-t border-gray-100">
-          <div className="text-[10px] text-gray-400 font-medium pt-1">
-            尺寸 {st.size.length === 3 ? '(宽×高×深)' : '(宽×高)'}
-          </div>
-          <StepperRow
-            label="宽 (W)"
-            value={st.size[0]}
-            step={0.05}
-            min={0.3}
-            max={6}
-            onChange={(v) =>
-              updateStructure(
-                selectedStructureId,
-                st.size!.length === 3
-                  ? { width: v, size: [v, st.size![1], st.size![2]] }
-                  : { width: v, size: [v, st.size![1]] }
-              )
-            }
-          />
-          <StepperRow
-            label="高 (H)"
-            value={st.size[1]}
-            step={0.05}
-            min={0.3}
-            max={4}
-            onChange={(v) =>
-              updateStructure(
-                selectedStructureId,
-                st.size!.length === 3
-                  ? { height: v, size: [st.size![0], v, st.size![2]] }
-                  : { height: v, size: [st.size![0], v] }
-              )
-            }
-          />
-          {st.size.length === 3 && (
-            <StepperRow
-              label="深 (D)"
-              value={st.size[2]}
-              step={0.05}
-              min={0.1}
-              max={2}
-              onChange={(v) =>
-                updateStructure(selectedStructureId, {
-                  depth: v,
-                  size: [st.size![0], st.size![1], v],
-                })
-              }
-            />
-          )}
-        </div>
-      )}
-
-      {/* 墙体位置与尺寸 */}
-      {extra.length !== undefined && extra.start && extra.end && (
-        <WallGeometryRows
-          selector={selectedStructureId}
-          start={extra.start as [number, number]}
-          end={extra.end as [number, number]}
-          length={extra.length as number}
-          height={extra.height as number | undefined}
-          updateStructure={updateStructure}
-        />
-      )}
-
-      {/* 旋转 */}
-      {extra.rotation !== undefined && (
-        <div className="space-y-1.5 pt-1.5 border-t border-gray-100">
-          <RotationControl
-            value={extra.rotation as number}
-            onChange={(v) => updateStructure(selectedStructureId, { rotation: Math.round(v) })}
-          />
-        </div>
-      )}
-
-      {extra.openInward !== undefined && (
-        <div className="pt-1.5 border-t border-gray-100">
-          <ToggleRow
-            label="开门方向"
-            options={[
-              { label: '向室外', value: 'false' },
-              { label: '向室内', value: 'true' },
-            ]}
-            value={String(extra.openInward)}
-            onChange={(v) => updateStructure(selectedStructureId, { openInward: v === 'true' })}
-          />
-        </div>
-      )}
-
-      {extra.hingeSide !== undefined && (
-        <div className="pt-1.5 border-t border-gray-100">
-          <ToggleRow
-            label="铰链位置"
-            options={[
-              { label: '左', value: 'left' },
-              { label: '右', value: 'right' },
-            ]}
-            value={extra.hingeSide as string}
-            onChange={(v) =>
-              updateStructure(selectedStructureId, { hingeSide: v as 'left' | 'right' })
-            }
-          />
-        </div>
-      )}
-
-      {extra.style !== undefined && (
-        <div className="pt-1.5 border-t border-gray-100">
-          <ToggleRow
-            label="窗样式"
-            options={[
-              { label: '默认', value: 'default' },
-              { label: '推拉', value: 'sliding' },
-            ]}
-            value={extra.style as string}
-            onChange={(v) =>
-              updateStructure(selectedStructureId, { style: v as 'default' | 'sliding' })
-            }
-          />
-        </div>
-      )}
+      {/* 门: 开门方向/铰链; 窗: 样式 (元素自定义配置) */}
+      {Config && door && <Config item={door} update={update} />}
+      {Config && win && <Config item={win} update={update} />}
     </PropertyCard>
-  );
-}
-
-function WallGeometryRows({
-  selector,
-  start,
-  end,
-  length,
-  height,
-  updateStructure,
-}: {
-  selector: string;
-  start: [number, number];
-  end: [number, number];
-  length: number;
-  height?: number;
-  updateStructure: (selector: string, patch: Record<string, unknown>) => void;
-}) {
-  const [sx, sz] = start;
-  const [ex, ez] = end;
-  const cx = (sx + ex) / 2;
-  const cz = (sz + ez) / 2;
-  const isHorizontal = Math.abs(ez - sz) < 0.01;
-  const isVertical = Math.abs(ex - sx) < 0.01;
-
-  return (
-    <div className="space-y-1.5 pt-1.5 border-t border-gray-100">
-      <div className="text-[10px] text-gray-400 font-medium pt-1">墙体位置 (整体平移)</div>
-      <StepperRow
-        label="中心 X"
-        value={cx}
-        step={0.1}
-        min={-15}
-        max={15}
-        onChange={(v) => {
-          const dx = v - cx;
-          updateStructure(selector, { start: [sx + dx, sz], end: [ex + dx, ez] });
-        }}
-      />
-      <StepperRow
-        label="中心 Z"
-        value={cz}
-        step={0.1}
-        min={-15}
-        max={15}
-        onChange={(v) => {
-          const dz = v - cz;
-          updateStructure(selector, { start: [sx, sz + dz], end: [ex, ez + dz] });
-        }}
-      />
-      {(isHorizontal || isVertical) && (
-        <div className="pt-1.5 border-t border-gray-100">
-          <ToggleRow
-            label="朝向"
-            options={[
-              { label: '水平', value: 'horizontal' },
-              { label: '垂直', value: 'vertical' },
-            ]}
-            value={isVertical ? 'vertical' : 'horizontal'}
-            onChange={(v) => {
-              // 绕中心 90° 旋转: 水平↔垂直
-              const targetIsVertical = v === 'vertical';
-              if (targetIsVertical && isHorizontal) {
-                updateStructure(selector, {
-                  start: [cx, cz - length / 2],
-                  end: [cx, cz + length / 2],
-                });
-              } else if (!targetIsVertical && isVertical) {
-                updateStructure(selector, {
-                  start: [cx - length / 2, cz],
-                  end: [cx + length / 2, cz],
-                });
-              }
-            }}
-          />
-        </div>
-      )}
-      <div className="text-[10px] text-gray-400 font-medium pt-1">墙体尺寸</div>
-      <StepperRow
-        label="长度"
-        value={length}
-        step={0.1}
-        min={0.3}
-        max={20}
-        onChange={(v) => {
-          // 沿 start→end 方向缩放 end 点, 保持墙体方向不变
-          const dx = ex - sx;
-          const dz = ez - sz;
-          const curLen = Math.sqrt(dx * dx + dz * dz);
-          if (curLen < 0.001) return; // 防止零向量
-          const scale = v / curLen;
-          updateStructure(selector, { end: [sx + dx * scale, sz + dz * scale] });
-        }}
-      />
-      {height !== undefined && (
-        <StepperRow
-          label="高度"
-          value={height}
-          step={0.1}
-          min={1.5}
-          max={4}
-          onChange={(v) => updateStructure(selector, { height: v })}
-        />
-      )}
-    </div>
   );
 }
 
@@ -1030,6 +516,10 @@ function OutdoorGroundPanel() {
     : null;
   if (!item) return null;
 
+  const update = (patch: Parameters<typeof updateGroundItem>[1]) => updateGroundItem(item.id, patch);
+  const el = getGroundElement(item.type);
+  const Config = el?.Config;
+
   return (
     <PropertyCard
       title="地面结构属性"
@@ -1043,26 +533,9 @@ function OutdoorGroundPanel() {
       }
     >
       <PropRow label="名称" value={item.name} />
-      <PropRow label="类型" value={GROUND_TYPE_LABEL[item.type] ?? item.type} />
-      <PositionRows
-        position={item.position}
-        onChange={(p) => updateGroundItem(item.id, { position: p })}
-        withY
-      />
-      <RotationControl
-        value={item.rotation}
-        onChange={(v) => updateGroundItem(item.id, { rotation: Math.round(v) })}
-      />
-      <SizeRows
-        size={item.size}
-        onChange={(s) => updateGroundItem(item.id, { size: s })}
-        max={100}
-      />
-      <ColorRow
-        label="颜色"
-        value={item.color}
-        onChange={(v) => updateGroundItem(item.id, { color: v })}
-      />
+      <PropRow label="类型" value={el?.label ?? item.type} />
+      <CommonOutdoorRows item={item} update={update} />
+      {Config && <Config item={item} update={update} />}
     </PropertyCard>
   );
 }
@@ -1080,6 +553,10 @@ function OutdoorObjectPanel() {
     : null;
   if (!item) return null;
 
+  const update = (patch: Parameters<typeof updateOutdoorObject>[1]) => updateOutdoorObject(item.id, patch);
+  const el = getOutdoorObjectElement(item.type);
+  const Config = el?.Config;
+
   return (
     <PropertyCard
       title="空间对象属性"
@@ -1093,26 +570,9 @@ function OutdoorObjectPanel() {
       }
     >
       <PropRow label="名称" value={item.name} />
-      <PropRow label="类型" value={OBJECT_TYPE_LABEL[item.type] ?? item.type} />
-      <PositionRows
-        position={item.position}
-        onChange={(p) => updateOutdoorObject(item.id, { position: p })}
-        withY
-      />
-      <RotationControl
-        value={item.rotation}
-        onChange={(v) => updateOutdoorObject(item.id, { rotation: Math.round(v) })}
-      />
-      <SizeRows
-        size={item.size}
-        onChange={(s) => updateOutdoorObject(item.id, { size: s })}
-        max={60}
-      />
-      <ColorRow
-        label="颜色"
-        value={item.color}
-        onChange={(v) => updateOutdoorObject(item.id, { color: v })}
-      />
+      <PropRow label="类型" value={el?.label ?? item.type} />
+      <CommonOutdoorRows item={item} update={update} sizeMax={60} />
+      {Config && <Config item={item} update={update} />}
     </PropertyCard>
   );
 }

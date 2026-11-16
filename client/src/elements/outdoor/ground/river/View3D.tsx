@@ -1,4 +1,4 @@
-import { ContentProps } from '../GroundItems';
+import type { ContentProps } from '../../types';
 
 /** 河流 — 蓝色水面 (不透明, 避免半透明叠加 z-fighting 闪烁) */
 export function River({ data, palette }: ContentProps) {

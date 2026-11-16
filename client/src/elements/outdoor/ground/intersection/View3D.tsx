@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { extend } from '@react-three/fiber';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { ContentProps } from '../GroundItems';
+import type { ContentProps } from '../../types';
 
 extend({ RoundedBoxGeometry });
 

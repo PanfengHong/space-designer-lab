@@ -1,4 +1,4 @@
-import { ContentProps } from '../GroundItems';
+import type { ContentProps } from '../../types';
 
 /** 草地 — 柔和绿色圆角地块 */
 export function Grass({ data, palette }: ContentProps) {

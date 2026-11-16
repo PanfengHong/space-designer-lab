@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
-import { ContentProps } from '../GroundItems';
+import type { ContentProps } from '../../types';
 
 /**
  * 园区围墙 — 白色混凝土立柱 + 栅栏杆 + 底部勒脚

@@ -1,5 +1,5 @@
 import type { Furniture, OutdoorSceneData, Room, SceneData, WallSegment } from '../types';
-import { footprintXOf } from '../data/furnitureMeta';
+import { footprintXOf } from '../elements/indoor/furniture/metas';
 
 /**
  * 平面占位检测 (2D OBB + 分离轴定理)
@@ -52,6 +52,8 @@ interface RectBound {
 type FurnitureLike = Pick<Furniture, 'type' | 'size'> & {
   rotation?: number;
   shape?: 'quarter' | 'rect';
+  /** 内嵌件 (灶台/水槽嵌进台面, 电视挂在柜上) — 允许与其他家具重叠 */
+  embedded?: boolean;
 };
 
 const DEG = Math.PI / 180;
@@ -262,6 +264,12 @@ export function buildIndoorColliders(sceneData: SceneData): IndoorColliders {
 /**
  * 校验家具落点: 在房间内 + 不与墙体/其他家具重叠
  * @param ignoreId 拖拽移动已有家具时传入自身 id, 避免与自己判重叠
+ *
+ * 内嵌件 (`embedded`) 只校验"是否落在空间内", 家具互压与墙体两项都跳过:
+ * - 互压: 它们的占地本来就落在母体柜/台面范围内 (灶台嵌在橱柜台面、水槽嵌在台面、
+ *   电视摆在电视柜上), 参与检测就会与母体互相报错, 表现为完全拖不动;
+ * - 墙体: 母体柜贴墙时嵌入件必然也贴墙, 严格判墙会让它在任何真实位置都非法。
+ * 换句话说, 嵌入件的位置合法性由它嵌进去的那个母体继承, 这里只管别拖出户型。
  */
 export function checkIndoorPlacement(
   colliders: IndoorColliders,
@@ -274,12 +282,14 @@ export function checkIndoorPlacement(
   const corners = obbCorners(obb);
 
   // 顺序: 先报物理冲突 (更具体、可操作), 最后才是范围判定
-  for (const o of colliders.furniture) {
-    if (ignoreId && o.id === ignoreId) continue;
-    if (obbOverlap(obb, o.obb)) return { ok: false, reason: `与「${o.name}」重叠` };
-  }
-  for (const o of colliders.walls) {
-    if (obbOverlap(obb, o.obb)) return { ok: false, reason: '与墙体重叠' };
+  if (!item.embedded) {
+    for (const o of colliders.furniture) {
+      if (ignoreId && o.id === ignoreId) continue;
+      if (obbOverlap(obb, o.obb)) return { ok: false, reason: `与「${o.name}」重叠` };
+    }
+    for (const o of colliders.walls) {
+      if (obbOverlap(obb, o.obb)) return { ok: false, reason: '与墙体重叠' };
+    }
   }
   if (!insideBounds(corners, colliders.rooms)) {
     return { ok: false, reason: '超出空间范围' };

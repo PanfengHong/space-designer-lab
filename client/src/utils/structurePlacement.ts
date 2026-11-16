@@ -8,6 +8,7 @@ import type {
   Window,
 } from '../types';
 import { obbCorners, obbOverlap, furnitureObb, type Obb2 } from './collision';
+import type { StructureTemplate } from '../elements/indoor/structure/templates';
 
 /**
  * 建筑结构层元素的拖入放置。
@@ -23,39 +24,6 @@ import { obbCorners, obbOverlap, furnitureObb, type Obb2 } from './collision';
  * - group rotation 为绕 Y 轴角度(度), local +X → (cosθ, -sinθ), local +Z → (sinθ, cosθ);
  * - 门窗的宽度沿 local +X, 因此要求 local +X 平行于墙方向。
  */
-
-export type StructureType = 'wall' | 'door' | 'window' | 'bayWindow' | 'frenchWindow';
-
-export interface StructureTemplate {
-  /** 素材唯一键 (缩略图缓存 / React key) */
-  id: string;
-  type: StructureType;
-  name: string;
-  /**
-   * 尺寸 (米):
-   * - wall:        [长度, 高度(仅预览用, 落位取层高), 厚度]
-   * - door:        [宽度, 高度, 厚度]
-   * - window:      [宽度, 高度, 厚度]
-   * - bayWindow:   [宽度, 高度, 凸出深度]
-   * - frenchWindow:[宽度, 高度, 厚度]
-   */
-  size: [number, number, number];
-  /** 窗台高度 (仅 window / bayWindow) */
-  sill?: number;
-  style?: string;
-}
-
-/** 建筑结构素材库 — 对应左面板「建筑结构层 · 墙体 楼板 门窗」 */
-export const STRUCTURE_CATALOG: StructureTemplate[] = [
-  { id: 'st-wall', type: 'wall', name: '墙体', size: [2.4, 2.8, 0.2] },
-  { id: 'st-wall-short', type: 'wall', name: '半墙', size: [1.2, 1.1, 0.2] },
-  { id: 'st-door', type: 'door', name: '平开门', size: [0.9, 2.1, 0.2], style: 'default' },
-  { id: 'st-door-glass', type: 'door', name: '玻璃推拉门', size: [1.6, 2.2, 0.2], style: 'glass' },
-  { id: 'st-window', type: 'window', name: '平窗', size: [1.5, 1.5, 0.2], sill: 0.9, style: 'default' },
-  { id: 'st-window-sliding', type: 'window', name: '推拉窗', size: [1.8, 1.5, 0.2], sill: 0.9, style: 'sliding' },
-  { id: 'st-bay', type: 'bayWindow', name: '飘窗', size: [1.8, 1.6, 0.6], sill: 0.9 },
-  { id: 'st-french', type: 'frenchWindow', name: '落地窗', size: [2.0, 2.4, 0.2] },
-];
 
 /** 落到房间里的完整结构数据 (判别联合, 直接交给 store 追加) */
 export type StructurePayload =

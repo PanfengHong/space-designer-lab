@@ -5,12 +5,12 @@ import { inferDevice } from '../../utils/device';
 import { buildIndoorColliders, checkIndoorPlacement } from '../../utils/collision';
 import { findRoomAt } from '../../utils/r3fBridge';
 import { roomOutline } from '../../utils/roomOutline';
-import { footprintOf } from '../../data/furnitureMeta';
-import { FLOOR_MATERIALS, FLOOR_MATERIAL_ORDER, floorMaterialDef } from '../../data/floorMaterials';
+import { footprintOf } from '../../elements/indoor/furniture/metas';
 import { normalizeDeg } from '../../utils/sceneQuery';
-import { C } from './planColors';
+import { C } from '../../elements/common/planColors';
 import { FurnitureSymbol2D, furnitureHitTest } from './furnitureSymbol2D';
-import { WallLine, Door2D, Window2D, BayWindow2D, FrenchWindow2D } from './structureSymbol2D';
+import { WallLine, Door2D, Window2D, BayWindow2D, FrenchWindow2D } from '../../elements/indoor/structure';
+import { RoomFloor } from '../../elements/indoor/structure/floor/FloorPlan';
 
 /* ============================================================
  * 极简灰阶平面图 (参考建筑户型图风格)
@@ -148,6 +148,7 @@ export function FloorPlan2D() {
   const setDraggingFurniture = useAppStore((s) => s.setDraggingFurniture);
   const addFurniture = useAppStore((s) => s.addFurniture);
   const updateFurniture = useAppStore((s) => s.updateFurniture);
+  const selectedFurnitureId = useAppStore((s) => s.selectedFurnitureId);
 
   /** 占位盒 (墙 + 家具 + 房间范围) — 放置校验用, 与 3D 拖拽共用同一份计算 */
   const colliders = useMemo(() => buildIndoorColliders(sceneData), [sceneData]);
@@ -354,20 +355,19 @@ export function FloorPlan2D() {
     const hit = interiorLocked() ? null : pickFurnitureAt(e.clientX, e.clientY);
     if (hit) {
       useAppStore.getState().selectFurniture(hit.id);
-      // 内嵌件 (灶台/水槽嵌在台面里) 不参与移动: 占地本就落在母体柜内, 一动必判重叠
-      if (!hit.embedded) {
-        moveRef.current = {
-          id: hit.id,
-          startClientX: e.clientX,
-          startClientY: e.clientY,
-          origX: hit.position[0],
-          origZ: hit.position[2],
-          grabbed: false,
-          last: null,
-        };
-        // 合成事件 (自动化测试) 里 pointerId 可能不是活动指针, 捕获会抛错, 忽略即可
-        try { (e.target as Element).setPointerCapture(e.pointerId); } catch {}
-      }
+      // 内嵌件 (灶台/水槽嵌在台面里) 同样可以拖: 落点校验对它们跳过家具互压
+      // (见 collision.checkIndoorPlacement), 拖到台面上不会被判"与橱柜重叠"。
+      moveRef.current = {
+        id: hit.id,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        origX: hit.position[0],
+        origZ: hit.position[2],
+        grabbed: false,
+        last: null,
+      };
+      // 合成事件 (自动化测试) 里 pointerId 可能不是活动指针, 捕获会抛错, 忽略即可
+      try { (e.target as Element).setPointerCapture(e.pointerId); } catch {}
       return; // 命中家具: 选中/拖动, 不进入画布平移
     }
     // 点在空白处 → 清除选中, 与 3D 视口行为一致
@@ -582,9 +582,7 @@ export function FloorPlan2D() {
         onPointerUp={handlePointerUp}
         onDoubleClick={handleDoubleClick}
       >
-        <FloorPatterns />
-
-        {/* 房间地面填充 */}
+        {/* 房间地面填充 (平面图不画地面材质花纹) */}
         {rooms.map((room) => (
           <RoomFloor key={`floor-${room.id}`} room={room} />
         ))}
@@ -626,19 +624,32 @@ export function FloorPlan2D() {
         )}
 
         {/* 家具
-            分两遍渲染: 普通家具 → 内嵌件 (灶台/水槽等嵌在橱柜里的) 后画。
+            分三遍渲染: 普通家具 → 内嵌件 (灶台/水槽等嵌在橱柜里的) → 当前选中件。
             内嵌件占地被橱柜完全覆盖, 同层渲染时后出现的橱柜命中区 (西橱柜等)
             会把它压住 (SVG 后者在上), 导致点灶台选中橱柜。
-            内嵌件放到最上层后, 小面积的灶台/水槽优先吃到点击。 */}
+            内嵌件放到上层后, 小面积的灶台/水槽优先吃到点击。
+            选中件再压一层: 选中框和旋转手柄画在自己这一组里, 若下面还有邻件
+            (床头柜/沙发)后画, 手柄会被盖掉半截 —— 挪到最上层才点得到。 */}
         {rooms.map((room) =>
-          room.furniture.filter((f) => !f.embedded).map((f) => (
-            <Furniture2DInteractive key={f.id} furniture={f} dragging={moveGhost?.id === f.id} />
-          ))
+          room.furniture
+            .filter((f) => !f.embedded && f.id !== selectedFurnitureId)
+            .map((f) => (
+              <Furniture2DInteractive key={f.id} furniture={f} dragging={moveGhost?.id === f.id} />
+            ))
         )}
         {rooms.map((room) =>
-          room.furniture.filter((f) => f.embedded).map((f) => (
-            <Furniture2DInteractive key={f.id} furniture={f} dragging={false} />
-          ))
+          room.furniture
+            .filter((f) => f.embedded && f.id !== selectedFurnitureId)
+            .map((f) => (
+              <Furniture2DInteractive key={f.id} furniture={f} dragging={false} />
+            ))
+        )}
+        {rooms.map((room) =>
+          room.furniture
+            .filter((f) => f.id === selectedFurnitureId)
+            .map((f) => (
+              <Furniture2DInteractive key={f.id} furniture={f} dragging={moveGhost?.id === f.id} />
+            ))
         )}
 
         {/* 拖动中的实时预览: 只画局部 state, 不碰 store */}
@@ -914,68 +925,48 @@ function PerimeterDims({
   );
 }
 
-/** 房间地面填充 — 白底 + 材质色淡染 + 材质线稿 (木板缝 / 砖缝 / 地毯点) */
-function RoomFloor({ room }: { room: Room }) {
-  // 与 3D 地坪同口径: 用闭合墙环而不是墙体端点包围盒 (借来的长墙会把地面拉出房间)
-  const b = roomOutline(room.walls);
-  const x = b.minX;
-  const z = b.minZ;
-  const w = b.width;
-  const h = b.depth;
-  const m = floorMaterialDef(room);
+
+
+/**
+ * 旋转手柄的图标 (顺时针环形箭头, 与工具条 RotateCw 同一套图形语言)。
+ *
+ * 用 path 而不是 <text>R</text>: 文字字形会随父级 rotate 一起转, 转到 90° 时 "R"
+ * 是躺着的; 而且字体在不同机器上字形差异大, 小尺寸下笔画糊成一团。箭头图形
+ * 通过 angle 反向抵消父级旋转, 任何朝向下都保持"顺时针"的直觉。
+ *
+ * 尺寸按手柄半径等比缩放 (图标外接框 ≈ 1.16r), 描边 3.4/24 —— 平面图里 1px ≈ 2cm,
+ * 手柄直径只有 26cm, 线太细会直接消失 (门把手踩过同一个坑); 但也不能粗到糊在一起,
+ * 3.4 是这个直径下仍能看出"环形 + 箭头尖"的最粗值。
+ */
+const ROTATE_ICON = {
+  /** lucide rotate-cw 的路径 */
+  arc: 'M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8',
+  arrow: 'M21 3v5h-5',
+  /** 视口 24×24, 图形外接框的半径 */
+  half: 12,
+  /** 图标外接框 / 手柄半径 (留出约 1/4 半径的白边, 不然箭头贴在绿圈上显脏) */
+  ratio: 1.16,
+  /** 24 网格下的描边宽度 */
+  stroke: 3.4,
+};
+
+function RotateHandleIcon({ cx, cy, r, angle = 0 }: { cx: number; cy: number; r: number; angle?: number }) {
+  const s = (r * ROTATE_ICON.ratio) / (ROTATE_ICON.half * 2);
   return (
-    <g>
-      <rect x={x} y={z} width={w} height={h} fill={C.floor} stroke="none" />
-      <rect x={x} y={z} width={w} height={h} fill={m.swatch} fillOpacity={0.09} stroke="none" />
-      {m.pattern !== 'solid' && (
-        <rect x={x} y={z} width={w} height={h} fill={`url(#floor-pat-${m.id})`} stroke="none" />
-      )}
+    <g
+      transform={`translate(${cx} ${cy}) rotate(${angle}) scale(${s}) translate(-${ROTATE_ICON.half} -${ROTATE_ICON.half})`}
+      fill="none"
+      stroke="#16a34a"
+      strokeWidth={ROTATE_ICON.stroke}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      pointerEvents="none"
+    >
+      <path d={ROTATE_ICON.arc} />
+      <path d={ROTATE_ICON.arrow} />
     </g>
   );
 }
-
-/**
- * 地面材质填充图案 —— 与 3D 用同一份材质注册表 (data/floorMaterials.ts)。
- * 尺寸单位就是 viewBox 的米, 所以木板缝 0.15m、地砖 0.6/0.3m 都是真实比例。
- */
-function FloorPatterns() {
-  return (
-    <defs>
-      {FLOOR_MATERIAL_ORDER.map((id) => {
-        const m = FLOOR_MATERIALS[id];
-        if (m.pattern === 'solid') return null;
-        if (m.pattern === 'plank') {
-          return (
-            <pattern key={id} id={`floor-pat-${id}`} patternUnits="userSpaceOnUse" width={1.2} height={0.15}>
-              <line x1={0} y1={0.002} x2={1.2} y2={0.002} stroke={m.grain} strokeWidth={0.012} opacity={0.55} />
-              <line x1={0.62} y1={0.002} x2={0.62} y2={0.15} stroke={m.grain} strokeWidth={0.01} opacity={0.35} />
-            </pattern>
-          );
-        }
-        if (m.pattern === 'dot') {
-          return (
-            <pattern key={id} id={`floor-pat-${id}`} patternUnits="userSpaceOnUse" width={0.12} height={0.12}>
-              <circle cx={0.06} cy={0.06} r={0.011} fill={m.grain} opacity={0.45} />
-            </pattern>
-          );
-        }
-        const cell = m.pattern === 'grid-coarse' ? 0.6 : 0.3;
-        return (
-          <pattern key={id} id={`floor-pat-${id}`} patternUnits="userSpaceOnUse" width={cell} height={cell}>
-            <path
-              d={`M ${cell} 0 H 0 V ${cell}`}
-              fill="none"
-              stroke={m.grain}
-              strokeWidth={0.012}
-              opacity={0.45}
-            />
-          </pattern>
-        );
-      })}
-    </defs>
-  );
-}
-
 
 /**
  * 平面图家具的交互包装 — 符号 + 选中描边 + 旋转手柄。
@@ -1012,31 +1003,28 @@ function Furniture2DInteractive({ furniture, dragging }: { furniture: Furniture;
             fill="none" stroke="#22c55e" strokeWidth={0.045} rx={0.05}
             pointerEvents="none"
           />
-          {!furniture.embedded && (
-            <g
-              style={{ cursor: 'pointer' }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                updateFurniture(furniture.id, {
-                  rotation: normalizeDeg(furniture.rotation + 90),
-                });
-              }}
-            >
-              <circle
-                cx={hitX + hitW + handleR * 0.9} cy={hitY - handleR * 0.9} r={handleR}
-                fill="#ffffff" stroke="#22c55e" strokeWidth={0.04}
-              />
-              <text
-                x={hitX + hitW + handleR * 0.9} y={hitY - handleR * 0.9}
-                textAnchor="middle" dominantBaseline="central"
-                fontSize={0.15} fontWeight={600} fill="#16a34a"
-                style={{ userSelect: 'none' }}
-              >
-                R
-              </text>
-            </g>
-          )}
+          {/* 旋转手柄: 内嵌件 (灶台/水槽) 也允许旋转 —— 它们能拖动, 自然也该能转 */}
+          <g
+            style={{ cursor: 'pointer' }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              updateFurniture(furniture.id, {
+                rotation: normalizeDeg(furniture.rotation + 90),
+              });
+            }}
+          >
+            <circle
+              cx={hitX + hitW + handleR * 0.9} cy={hitY - handleR * 0.9} r={handleR}
+              fill="#ffffff" stroke="#22c55e" strokeWidth={0.04}
+            />
+            <RotateHandleIcon
+              cx={hitX + hitW + handleR * 0.9}
+              cy={hitY - handleR * 0.9}
+              r={handleR}
+              angle={furniture.rotation}
+            />
+          </g>
         </g>
       )}
     </g>

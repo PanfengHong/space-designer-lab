@@ -76,18 +76,11 @@ export function FurnitureToolbar() {
       className="absolute left-0 top-0 z-30 flex items-center gap-0.5 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg px-1 py-0.5 select-none"
       style={{ opacity: 0, willChange: 'transform' }}
     >
-      <ToolBtn
-        title="左旋 90°"
-        disabled={item.embedded}
-        onClick={() => rotate(-90)}
-      >
+      {/* 内嵌件 (灶台/水槽) 不锁旋转: 它们可以拖动, 自然也该能转 */}
+      <ToolBtn title="左旋 90°" onClick={() => rotate(-90)}>
         <RotateCcw size={14} />
       </ToolBtn>
-      <ToolBtn
-        title="右旋 90°（快捷键 R）"
-        disabled={item.embedded}
-        onClick={() => rotate(90)}
-      >
+      <ToolBtn title="右旋 90°（快捷键 R）" onClick={() => rotate(90)}>
         <RotateCw size={14} />
       </ToolBtn>
       <span className="w-px h-4 bg-gray-200 mx-0.5" />

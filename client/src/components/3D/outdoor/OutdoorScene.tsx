@@ -10,6 +10,7 @@ import type { ViewMode, CameraPreset, LightingModeConfig, GridConfig, WalkPoint 
 import { GroundItemsGroup, GroundItemContent } from './GroundItems';
 import { OutdoorObjectsGroup, OutdoorObjectContent } from './OutdoorObjects';
 import { OutdoorTransformController } from './OutdoorTransform';
+import { getOutdoorObjectElement } from '../../../elements/outdoor/objects';
 import { useOutdoorPalette } from '../../../constants/outdoorStyles';
 import { buildOutdoorColliders, checkOutdoorPlacement, type OutdoorColliders } from '../../../utils/collision';
 import type { ModelLayer, GroundItem, OutdoorObject, GroundItemType, OutdoorObjectType } from '../../../types';
@@ -324,7 +325,9 @@ export function OutdoorScene() {
           rotation: 0,
           size: draggingOutdoor.size,
           color: draggingOutdoor.color,
-        };
+          // 预设附加字段 (三岔路口 branches 等) 随素材一起落位
+          ...(draggingOutdoor.extra ?? {}),
+        } as GroundItem;
         addGroundItem(newItem);
       } else {
         const newObj: OutdoorObject = {
@@ -376,12 +379,10 @@ export function OutdoorScene() {
   );
 }
 
-/** 户外素材缩略图渲染 (供素材库复用) */
-const OBJECT_TYPE_SET = new Set<string>(['building', 'warehouse', 'car', 'truck', 'tree']);
-
+/** 户外素材缩略图渲染 (供素材库复用) —— 空间对象优先, 否则按地面元素分发 */
 export function OutdoorThumbnailContent({ item }: { item: GroundItem | OutdoorObject }) {
   const palette = useOutdoorPalette();
-  if (OBJECT_TYPE_SET.has(item.type)) {
+  if (getOutdoorObjectElement(item.type as OutdoorObject['type'])) {
     return <OutdoorObjectContent data={item as OutdoorObject} palette={palette} />;
   }
   return <GroundItemContent data={item as GroundItem} palette={palette} />;

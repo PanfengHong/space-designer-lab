@@ -4,10 +4,12 @@ import { useAppStore } from '../../store/useAppStore';
 import { FurnitureCatalog } from '../panel/FurnitureCatalog';
 import { StructureCatalog } from '../panel/StructureCatalog';
 import { OutdoorCatalog } from '../panel/OutdoorCatalog';
+import { getGroundElement } from '../../elements/outdoor/ground';
+import { getOutdoorObjectElement } from '../../elements/outdoor/objects';
 import { OUTDOOR_STYLE_OPTIONS } from '../../constants/outdoorStyles';
 import { floorMaterialDef } from '../../data/floorMaterials';
 import { roomOutline } from '../../utils/roomOutline';
-import type { Room, SceneData } from '../../types';
+import type { GroundItem, OutdoorObject, Room, SceneData } from '../../types';
 import {
   ItemList,
   LayerGroup,
@@ -421,28 +423,13 @@ function InteriorSections({ expanded, toggle }: { expanded: Record<SectionKey, b
 
 /* ==================== 户外 ==================== */
 
-const GROUND_TYPE_LABEL: Record<string, string> = {
-  ground: '地面',
-  grass: '草地',
-  river: '河流',
-  road: '道路',
-  intersection: '路口',
-  ramp: '匝道',
-  fence: '围墙',
-  playground: '操场',
-};
-const OBJECT_TYPE_LABEL: Record<string, string> = {
-  building: '玻璃建筑',
-  warehouse: '厂房仓库',
-  'teaching-building': '教学楼',
-  'lab-building': '实验楼',
-  dormitory: '宿舍楼',
-  gate: '园区大门',
-  'guard-booth': '门卫室',
-  car: '轿车',
-  truck: '卡车',
-  tree: '树木',
-};
+/** 元素类型 → 中文名: 唯一来源是元素注册表 (elements/outdoor) */
+function groundLabel(type: GroundItem['type']): string {
+  return getGroundElement(type)?.label ?? type;
+}
+function objectLabel(type: OutdoorObject['type']): string {
+  return getOutdoorObjectElement(type)?.label ?? type;
+}
 
 function OutdoorSections({ expanded, toggle }: { expanded: Record<SectionKey, boolean>; toggle: ToggleFn }) {
   const layers = useAppStore((s) => s.layers);
@@ -462,12 +449,12 @@ function OutdoorSections({ expanded, toggle }: { expanded: Record<SectionKey, bo
   const groundItems: PanelItem[] = scene.ground.map((g) => ({
     id: g.id,
     label: g.name,
-    tag: `[${GROUND_TYPE_LABEL[g.type] ?? g.type}]`,
+    tag: `[${groundLabel(g.type)}]`,
   }));
   const objectItems: PanelItem[] = scene.objects.map((o) => ({
     id: o.id,
     label: o.name,
-    tag: `[${OBJECT_TYPE_LABEL[o.type] ?? o.type}]`,
+    tag: `[${objectLabel(o.type)}]`,
   }));
 
   const styleItems: PanelStyle[] = OUTDOOR_STYLE_OPTIONS.map((s) => ({

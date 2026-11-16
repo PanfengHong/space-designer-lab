@@ -1,14 +1,7 @@
-import { useEffect } from 'react';
-import type { BayWindow, Door, FrenchWindow, WallSegment, Window as WallWindow } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
-import { requestThumbnail, useThumbnailUrl } from '../../utils/thumbnailCapture';
-import { STRUCTURE_CATALOG, type StructureTemplate } from '../../utils/structurePlacement';
-import { Walls } from '../3D/indoor/building/Walls';
-import { Doors } from '../3D/indoor/building/Doors';
-import { Windows } from '../3D/indoor/building/Windows';
-import { BayWindows } from '../3D/indoor/building/BayWindow';
-import { FrenchWindows } from '../3D/indoor/building/FrenchWindow';
-import { WallLine, Door2D, Window2D, BayWindow2D, FrenchWindow2D } from '../2D/structureSymbol2D';
+import { STRUCTURE_ELEMENTS } from '../../elements/indoor/structure';
+import type { StructureElement, StructureTemplate } from '../../elements/types';
+import { StructureIcon2D, StructureIcon3D } from '../../elements/common/ElementIcon';
 import { setCustomDragImage } from './dragImage';
 
 /**
@@ -19,211 +12,18 @@ import { setCustomDragImage } from './dragImage';
  * - 墙体: 默认沿 X 轴以落点为中心, 自动夹到房间范围内, 高度取层高
  * - 门 / 窗 / 飘窗 / 落地窗: 自动吸附到最近的墙面, 沿墙居中夹紧, 朝向自动对齐
  *
- * 缩略图: 3D 模式下复用全局隐藏 Canvas 离线捕获 (与家具素材库同一套机制),
- * 直接渲染真实的建筑组件; 平面图模式下改画 2D 符号 (structureSymbol2D),
- * 与落到平面图里的图形同源。
+ * 素材清单 = 各结构元素目录的 templates.ts (纯数据, 拖拽直接携带模板);
+ * 图标 (视图①) 由 elements/common/ElementIcon 统一渲染, 单实例预览数据由元素 icon.tsx 组装。
  */
 
-/** 缩略图里使用的墙厚 (仅影响视觉, 与场景墙厚无关) */
-const THUMB_WALL_T = 0.2;
-
-/** 用素材参数造一份只用于缩略图渲染的假数据 */
-function thumbScene(tpl: StructureTemplate) {
-  const id = `__catalog-${tpl.id}`;
-  const [a, b, c] = tpl.size;
-  switch (tpl.type) {
-    case 'wall': {
-      const seg: WallSegment = {
-        id,
-        start: [-a / 2, 0],
-        end: [a / 2, 0],
-        height: b,
-      };
-      return (
-        <Walls
-          segments={[seg]}
-          roomId={id}
-          height={b}
-          thickness={c}
-          showCeiling={false}
-        />
-      );
-    }
-    case 'door': {
-      const door: Door = {
-        id,
-        position: [0, 0, 0],
-        width: a,
-        height: b,
-        rotation: 0,
-        hingeSide: 'left',
-        style: tpl.style === 'glass' ? 'glass' : 'default',
-      };
-      return <Doors doors={[door]} roomId={id} wallThickness={THUMB_WALL_T} />;
-    }
-    case 'window': {
-      const win: WallWindow = {
-        id,
-        position: [0, 0, 0],
-        width: a,
-        height: b,
-        sill: tpl.sill ?? 0.9,
-        rotation: 0,
-        style: tpl.style === 'sliding' ? 'sliding' : 'default',
-      };
-      return <Windows windows={[win]} roomId={id} wallThickness={THUMB_WALL_T} />;
-    }
-    case 'bayWindow': {
-      const bay: BayWindow = {
-        id,
-        position: [0, tpl.sill ?? 0.9, 0],
-        width: a,
-        height: b,
-        depth: c,
-        rotation: 0,
-      };
-      return <BayWindows bayWindows={[bay]} roomId={id} wallThickness={THUMB_WALL_T} />;
-    }
-    case 'frenchWindow': {
-      const fw: FrenchWindow = { id, position: [0, 0, 0], width: a, height: b, rotation: 0 };
-      return <FrenchWindows frenchWindows={[fw]} roomId={id} wallThickness={THUMB_WALL_T} />;
-    }
-  }
+interface CatalogEntry {
+  el: StructureElement;
+  tpl: StructureTemplate;
 }
 
-function CatalogThumbnail({ tpl }: { tpl: StructureTemplate }) {
-  const key = `structure-${tpl.id}`;
-  const url = useThumbnailUrl(key);
-
-  useEffect(() => {
-    const [w, h, d] = tpl.size;
-    const maxDim = Math.max(w, h, d, 1);
-    const camDist = maxDim * 1.7 + 1.1;
-    // 窗 / 飘窗的原点带窗台高度, 需要把整体下移让它落在画面中心
-    const lift = tpl.type === 'window' || tpl.type === 'bayWindow' ? (tpl.sill ?? 0.9) + h / 2 : h / 2;
-
-    requestThumbnail({
-      key,
-      camera: { fov: 35, position: [camDist * 0.62, camDist * 0.42, camDist * 0.78] },
-      content: (
-        <>
-          <ambientLight intensity={0.7} />
-          <directionalLight position={[3, 5, 3]} intensity={0.55} />
-          <directionalLight position={[-3, 3, -3]} intensity={0.22} color="#c8daf0" />
-          <hemisphereLight args={['#dceaf6', '#e4eadf', 0.4]} />
-          <group position={[0, -lift, 0]}>{thumbScene(tpl)}</group>
-        </>
-      ),
-    });
-  }, [tpl, key]);
-
-  return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      {url ? (
-        <img
-          src={url}
-          alt={tpl.name}
-          draggable={false}
-          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-        />
-      ) : (
-        <div className="w-5 h-5 rounded-full border-2 border-gray-200 border-t-gray-400 animate-spin" />
-      )}
-    </div>
-  );
-}
-
-/**
- * 平面图模式下的结构素材预览 —— 用真实的 2D 符号组件画,
- * 所以"卡上看到的样子"就是"落到平面图里的样子"。
- *
- * 预览几何都摆在原点上, 只为确定 viewBox; 门的开门弧线会向 -Z 甩出一整个门宽,
- * 所以门卡片的取景框要比其它类型高一倍, 否则弧线被裁。
- */
-function planPreviewBox(tpl: StructureTemplate) {
-  const [a, , c] = tpl.size;
-  switch (tpl.type) {
-    case 'wall':
-      return { x0: -a / 2, y0: -c / 2, x1: a / 2, y1: c / 2 };
-    case 'door':
-      return { x0: -a / 2, y0: -a, x1: a / 2, y1: 0 };
-    case 'window':
-      return { x0: -a / 2, y0: -c / 2, x1: a / 2, y1: c / 2 };
-    case 'bayWindow':
-      return { x0: -a / 2, y0: 0, x1: a / 2, y1: c };
-    case 'frenchWindow':
-      return { x0: -a / 2, y0: -0.1, x1: a / 2, y1: 0.1 };
-  }
-}
-
-function StructurePlanPreview({ tpl }: { tpl: StructureTemplate }) {
-  const box = planPreviewBox(tpl);
-  const w = box.x1 - box.x0;
-  const h = box.y1 - box.y0;
-  const pad = Math.max(w, h) * 0.1 + 0.03;
-
-  return (
-    <svg
-      viewBox={`${box.x0 - pad} ${box.y0 - pad} ${w + pad * 2} ${h + pad * 2}`}
-      preserveAspectRatio="xMidYMid meet"
-      style={{ width: '100%', height: '100%', display: 'block' }}
-    >
-      {planSymbol(tpl)}
-    </svg>
-  );
-}
-
-/** 按结构类型造一份只用于 2D 预览的假数据 (与 thumbScene 同参数) */
-function planSymbol(tpl: StructureTemplate) {
-  const [a, b, c] = tpl.size;
-  const id = `__plan-${tpl.id}`;
-  const wt = Math.min(c, 0.2);
-  switch (tpl.type) {
-    case 'wall': {
-      const seg: WallSegment = { id, start: [-a / 2, 0], end: [a / 2, 0], height: b };
-      return <WallLine wall={seg} thickness={c} windows={[]} />;
-    }
-    case 'door': {
-      const door: Door = {
-        id,
-        position: [0, 0, 0],
-        width: a,
-        height: b,
-        rotation: 0,
-        hingeSide: 'left',
-        style: tpl.style === 'glass' ? 'glass' : 'default',
-      };
-      return <Door2D door={door} wallThickness={wt} />;
-    }
-    case 'window': {
-      const win: WallWindow = {
-        id,
-        position: [0, 0, 0],
-        width: a,
-        height: b,
-        sill: tpl.sill ?? 0.9,
-        rotation: 0,
-        style: tpl.style === 'sliding' ? 'sliding' : 'default',
-      };
-      return <Window2D window={win} wallThickness={wt} />;
-    }
-    case 'bayWindow': {
-      const bay: BayWindow = {
-        id,
-        position: [0, tpl.sill ?? 0.9, 0],
-        width: a,
-        height: b,
-        depth: c,
-        rotation: 0,
-      };
-      return <BayWindow2D bayWindow={bay} wallThickness={wt} />;
-    }
-    case 'frenchWindow': {
-      const fw: FrenchWindow = { id, position: [0, 0, 0], width: a, height: b, rotation: 0 };
-      return <FrenchWindow2D frenchWindow={fw} wallThickness={wt} />;
-    }
-  }
-}
+const ENTRIES: CatalogEntry[] = STRUCTURE_ELEMENTS.flatMap((el) =>
+  el.templates.map((tpl) => ({ el, tpl })),
+);
 
 export function StructureCatalog() {
   const setDraggingStructure = useAppStore((s) => s.setDraggingStructure);
@@ -249,17 +49,17 @@ export function StructureCatalog() {
         </span>
       </div>
       <div className="grid grid-cols-2 gap-1.5">
-        {STRUCTURE_CATALOG.map((tpl) => (
+        {ENTRIES.map(({ el, tpl }) => (
           <div
             key={tpl.id}
             draggable
             onDragStart={(e) => handleDragStart(e, tpl)}
             onDragEnd={() => setDraggingStructure(null)}
-            className="flex flex-col bg-gray-50 hover:bg-gray-100 rounded-md cursor-grab active:cursor-grabbing transition-colors select-none overflow-hidden"
+            className="flex flex-col bg-gray-50 rounded-md cursor-grab active:cursor-grabbing transition-all select-none overflow-hidden ring-1 ring-transparent hover:ring-sky-400 hover:shadow-sm"
             title={`${tpl.name} ${tpl.size[0]}×${tpl.size[1]}m`}
           >
             <div className={`h-16 ${isPlan ? 'bg-white' : 'bg-gradient-to-br from-gray-50 to-gray-100'}`}>
-              {isPlan ? <StructurePlanPreview tpl={tpl} /> : <CatalogThumbnail tpl={tpl} />}
+              {isPlan ? <StructureIcon2D el={el} tpl={tpl} /> : <StructureIcon3D el={el} tpl={tpl} />}
             </div>
             <div className="px-1 py-1 text-center">
               <span className="text-[9px] text-gray-600">{tpl.name}</span>

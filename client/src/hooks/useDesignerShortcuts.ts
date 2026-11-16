@@ -115,7 +115,8 @@ export function useDesignerShortcuts() {
         const id = s.selectedFurnitureId;
         if (!id) return;
         const f = findFurniture(s.sceneData, id);
-        if (!f || f.embedded) return;
+        // 内嵌件 (灶台/水槽) 同样允许旋转 —— 它们已经可以从素材栏/场景里拖动
+        if (!f) return;
         e.preventDefault();
         s.updateFurniture(id, { rotation: normalizeDeg(f.rotation + (e.shiftKey ? -90 : 90)) });
       }

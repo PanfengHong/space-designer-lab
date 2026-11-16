@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ContentProps } from '../GroundItems';
+import type { ContentProps } from '../../types';
 
 /**
  * 操场 — 红色椭圆塑胶跑道 + 中间绿色足球场 + 两端半圆弯道

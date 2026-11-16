@@ -1,12 +1,12 @@
 import type { Room, WallSegment, Door, Window, FrenchWindow } from '../../../types';
 import { useAppStore } from '../../../store/useAppStore';
 import { floorMaterialOf } from '../../../data/floorMaterials';
-import { Floor } from './building/Floor';
-import { Walls } from './building/Walls';
-import { Doors } from './building/Doors';
-import { Windows } from './building/Windows';
-import { BayWindows } from './building/BayWindow';
-import { FrenchWindows } from './building/FrenchWindow';
+import { Floor } from '../../../elements/indoor/structure/floor/Floor';
+import { Walls } from '../../../elements/indoor/structure/wall/Walls';
+import { Doors } from '../../../elements/indoor/structure/door/Doors';
+import { Windows } from '../../../elements/indoor/structure/window/Windows';
+import { BayWindows } from '../../../elements/indoor/structure/bay-window/BayWindow';
+import { FrenchWindows } from '../../../elements/indoor/structure/french-window/FrenchWindow';
 import { Stairs } from './building/Stairs';
 import { ElevatorDoor } from './building/ElevatorDoor';
 

@@ -19,7 +19,8 @@ import type {
 import { mockSceneData, getSceneForModel } from '../data/mockScene';
 import { demoOutdoorScene, getOutdoorSceneForModel } from '../data/outdoorScene';
 import { saveSceneForModel, loadSceneForModel } from '../api/mockApi';
-import type { StructurePayload, StructureTemplate } from '../utils/structurePlacement';
+import type { StructurePayload } from '../utils/structurePlacement';
+import type { StructureTemplate } from '../elements/indoor/structure/templates';
 
 interface AppState {
   // 空间列表 (从当前 sceneData.rooms 动态拼装)
@@ -213,6 +214,8 @@ interface AppState {
     name: string;
     size: [number, number, number];
     color: string;
+    /** 预设附加字段 (路口 branches/arcRadius、车道数等), 落下时展开到元素数据 */
+    extra?: Record<string, unknown>;
   } | null;
   setDraggingOutdoor: (f: {
     kind: 'ground' | 'object';
@@ -220,6 +223,7 @@ interface AppState {
     name: string;
     size: [number, number, number];
     color: string;
+    extra?: Record<string, unknown>;
   } | null) => void;
   // 拖拽预览位置
   outdoorDragGhostPos: [number, number] | null;

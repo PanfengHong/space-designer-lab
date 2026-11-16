@@ -1,0 +1,65 @@
+/**
+ * 户外总平面图配色 —— 亮色 (白底园区图) / 暗色 (深底孪生风格) 两套。
+ * 2D 符号 (elements/outdoor/<分组>/<元素>/Symbol2D.tsx) 与 OutdoorPlan2D 共用,
+ * 保证同一元素在两种风格下取色一致。
+ */
+export const PLAN_LIGHT = {
+  bg: '#eef3f8',
+  ground: '#ffffff',
+  groundStroke: '#d8dee6',
+  grass: '#cfe9cd',
+  grassStroke: '#a8d4a6',
+  river: '#9ccdee',
+  riverStroke: '#7ab8e0',
+  road: '#c2cad4',
+  roadStroke: '#aeb8c4',
+  roadElevated: '#b8c2cd',
+  pillar: '#d8dee6',
+  pillarStroke: '#bcc8d4',
+  roadLine: '#ffffff',
+  building: '#d9ebf9',
+  buildingStroke: '#5a9fd4',
+  warehouse: '#f2f5f9',
+  warehouseStroke: '#b8c4d0',
+  car: '#ffffff',
+  carStroke: '#8a97a5',
+  truck: '#cfe2f5',
+  truckStroke: '#4a90d9',
+  tree: '#cfe9cd',
+  treeStroke: '#7fc07c',
+  select: '#16a34a',
+  text: '#4a627a',
+  textHalo: '#ffffff',
+};
+
+/** 暗色孪生风格 — 深底 + 冷色发光线条 */
+export const PLAN_DARK = {
+  bg: '#060e18',
+  ground: '#0b1622',
+  groundStroke: '#1d3a4f',
+  grass: '#123326',
+  grassStroke: '#1f5340',
+  river: '#0a2c47',
+  riverStroke: '#1d5a7d',
+  road: '#151d27',
+  roadStroke: '#26333f',
+  roadElevated: '#101720',
+  pillar: '#22303d',
+  pillarStroke: '#2f4a5c',
+  roadLine: '#5fe3ff',
+  building: '#1b4a66',
+  buildingStroke: '#3fd8ff',
+  warehouse: '#16222f',
+  warehouseStroke: '#2b465c',
+  car: '#243546',
+  carStroke: '#4a7f9e',
+  truck: '#1d3a52',
+  truckStroke: '#3fd8ff',
+  tree: '#123326',
+  treeStroke: '#2f7d5c',
+  select: '#22d3ee',
+  text: '#9adcf0',
+  textHalo: '#04121c',
+};
+
+export type OutdoorPlanPalette = typeof PLAN_LIGHT;
