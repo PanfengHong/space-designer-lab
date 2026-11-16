@@ -101,6 +101,19 @@ export interface StairFlight {
   stepHeight: number;
   stepDepth: number;
   width: number;
+  /**
+   * 梯段底部标高 (米)。默认 0 = 从本层地面向上爬;
+   * 负值 = 下行梯段 (消防楼梯通往下层): 顶阶踏面与本层地板齐平, 梯段穿过楼板洞口向下。
+   */
+  startHeight?: number;
+}
+
+// 楼板洞口 (楼梯井): x/z 为最小角, w/d 为边长 (米)
+export interface FloorOpening {
+  x: number;
+  z: number;
+  w: number;
+  d: number;
 }
 
 // 电梯门数据
@@ -208,6 +221,8 @@ export interface Room {
   floorMaterial?: FloorMaterialId;
   stairs?: StairFlight[];
   elevators?: ElevatorDoorData[];
+  /** 楼板洞口 (楼梯井等): 有洞口时地坪改为带孔挤出体, 下行楼梯从中穿过 */
+  floorOpenings?: FloorOpening[];
 }
 
 // 场景数据

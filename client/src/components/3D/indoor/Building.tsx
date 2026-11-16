@@ -215,6 +215,7 @@ export function Building({
         color={floorColor}
         material={floorMaterialOf(room)}
         elevation={floorElevation}
+        openings={room.floorOpenings}
       />
       <Walls
         segments={wallSegments}

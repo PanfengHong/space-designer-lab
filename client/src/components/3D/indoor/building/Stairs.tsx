@@ -33,11 +33,15 @@ export function Stairs({ flights, roomId }: StairsProps) {
         };
         const [dx, , dz] = dirMap[flight.direction];
 
+        // 梯段底部标高: 默认 0 (从地面起升); 下行梯段 (消防楼梯) 传负值,
+        // 顶阶踏面与本层地板齐平, 梯段穿过楼板洞口 (Room.floorOpenings) 向下。
+        const base = flight.startHeight ?? 0;
+
         const steps: ReactNode[] = [];
         const totalRun = flight.steps * flight.stepDepth;
 
         for (let i = 0; i < flight.steps; i++) {
-          const stepY = i * flight.stepHeight;
+          const stepY = base + i * flight.stepHeight;
           // 踏面中心位置 (沿方向前进)
           const stepCenter = (i + 0.5) * flight.stepDepth;
           const px = flight.position[0] + dx * stepCenter;
@@ -76,26 +80,26 @@ export function Stairs({ flights, roomId }: StairsProps) {
         for (const side of [1, -1]) {
           const sx = sideOffsetX * side;
           const sz = sideOffsetZ * side;
-          // 简化为多个小柱支撑
+          // 简化为多个小柱支撑: 从梯段底部 (base) 立到各级踏步
           for (let i = 0; i < flight.steps; i += 2) {
-            const stepY = i * flight.stepHeight;
+            const colH = i * flight.stepHeight;
             const stepCenter = (i + 0.5) * flight.stepDepth;
             const px = flight.position[0] + dx * stepCenter + sx;
             const pz = flight.position[2] + dz * stepCenter + sz;
             steps.push(
-              <mesh key={`${flight.id}-post-${side}-${i}`} position={[px, stepY / 2, pz]} castShadow>
-                <boxGeometry args={[0.04, stepY + 0.02, 0.04]} />
+              <mesh key={`${flight.id}-post-${side}-${i}`} position={[px, base + colH / 2, pz]} castShadow>
+                <boxGeometry args={[0.04, colH + 0.02, 0.04]} />
                 <meshStandardMaterial color="#5a5a5a" roughness={0.6} metalness={0.2} />
               </mesh>
             );
           }
         }
 
-        // 底层地面板 (楼梯底部斜面, 简化为实心三角)
+        // 底层地面板 (梯段底部的落地面/休息平台, 随 base 升降)
         const baseX = flight.position[0] + dx * totalRun / 2;
         const baseZ = flight.position[2] + dz * totalRun / 2;
         steps.push(
-          <mesh key={`${flight.id}-base`} position={[baseX, 0, baseZ]} receiveShadow>
+          <mesh key={`${flight.id}-base`} position={[baseX, base, baseZ]} receiveShadow>
             <boxGeometry args={[
               Math.abs(dx) > 0 ? totalRun : flight.width,
               0.02,
@@ -121,7 +125,7 @@ export function Stairs({ flights, roomId }: StairsProps) {
           >
             {steps}
             {isSelected && (
-              <mesh position={[baseX, flight.steps * flight.stepHeight / 2, baseZ]}>
+              <mesh position={[baseX, base + (flight.steps * flight.stepHeight) / 2, baseZ]}>
                 <boxGeometry args={[
                   Math.abs(dx) > 0 ? totalRun + 0.2 : flight.width + 0.2,
                   flight.steps * flight.stepHeight + 0.2,

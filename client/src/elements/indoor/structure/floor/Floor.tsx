@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
-import type { FloorMaterialId, WallSegment } from '../../../../types';
+import type { FloorMaterialId, FloorOpening, WallSegment } from '../../../../types';
 import { useAppStore } from '../../../../store/useAppStore';
 import { FLOOR_MATERIALS } from '../../../../data/floorMaterials';
 import { getFloorTexture } from '../../../../utils/floorTextures';
@@ -20,6 +20,12 @@ interface FloorProps {
    */
   elevation?: number;
   show?: boolean;
+  /**
+   * 楼板洞口 (楼梯井等, 世界坐标矩形)。传入后地坪从整块 box 换成带孔的挤出体,
+   * 下行楼梯 (StairFlight.startHeight < 0) 从洞口穿过楼板向下。
+   * 洞口会钳制在房间范围内; 比楼梯构件各大 3cm 左右, 避免与踏面/立柱严格共面。
+   */
+  openings?: FloorOpening[];
 }
 
 export function Floor({
@@ -30,6 +36,7 @@ export function Floor({
   material,
   elevation = 0,
   show = true,
+  openings,
 }: FloorProps) {
   const selectStructure = useAppStore((s) => s.selectStructure);
   const selectedId = useAppStore((s) => s.selectedStructureId);
@@ -72,16 +79,59 @@ export function Floor({
    * 模板纹理按材质缓存共用, 这里只 clone 一份改 repeat, 不动共用底图。
    */
   const def = material ? FLOOR_MATERIALS[material] : null;
+  /**
+   * 带洞口的楼板几何: 房间轮廓矩形挖掉若干矩形洞 (楼梯井)。
+   * Shape 平面用 (x, z), 挤出 depth 沿 shape +Z → rotateX(90°) 后变成世界 -Y,
+   * 顶面正好落在 y=0 (与 box 路径的板顶一致), 由外层 group 抬到 elevation。
+   * 挤出体 UV 是**世界米** (WorldUVGenerator 直接取顶点坐标), 与 box 的 0~1
+   * 不同 —— 贴图 repeat 要按 1/tile 设, 否则花纹会被拉扯。
+   */
+  const carvedGeometry = useMemo(() => {
+    if (!openings || openings.length === 0) return null;
+    if (width <= 0 || depth <= 0) return null;
+    const shape = new THREE.Shape();
+    shape.moveTo(bounds.minX, bounds.minZ);
+    shape.lineTo(bounds.maxX, bounds.minZ);
+    shape.lineTo(bounds.maxX, bounds.maxZ);
+    shape.lineTo(bounds.minX, bounds.maxZ);
+    shape.closePath();
+    for (const o of openings) {
+      const x1 = Math.max(bounds.minX, o.x);
+      const z1 = Math.max(bounds.minZ, o.z);
+      const x2 = Math.min(bounds.maxX, o.x + o.w);
+      const z2 = Math.min(bounds.maxZ, o.z + o.d);
+      if (x2 - x1 < 0.01 || z2 - z1 < 0.01) continue;
+      const hole = new THREE.Path();
+      hole.moveTo(x1, z1);
+      hole.lineTo(x2, z1);
+      hole.lineTo(x2, z2);
+      hole.lineTo(x1, z2);
+      hole.closePath();
+      shape.holes.push(hole);
+    }
+    const g = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false });
+    g.rotateX(Math.PI / 2);
+    return g;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openings, bounds.minX, bounds.maxX, bounds.minZ, bounds.maxZ, thickness]);
+
+  useEffect(() => () => carvedGeometry?.dispose(), [carvedGeometry]);
+
   const map = useMemo(() => {
     if (!def || width <= 0 || depth <= 0) return null;
     const t = getFloorTexture(def.id).clone();
     t.needsUpdate = true;
     t.wrapS = THREE.RepeatWrapping;
     t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(width / def.tile, depth / def.tile);
+    if (carvedGeometry) {
+      // 挤出体 UV = 世界米 → 1 米重复 1/tile 次
+      t.repeat.set(1 / def.tile, 1 / def.tile);
+    } else {
+      t.repeat.set(width / def.tile, depth / def.tile);
+    }
     return t;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [def?.id, width, depth]);
+  }, [def?.id, width, depth, carvedGeometry]);
 
   useEffect(() => () => map?.dispose(), [map]);
 
@@ -95,10 +145,13 @@ export function Floor({
     >
       <mesh
         receiveShadow
-        position={[centerX, elevation - thickness / 2, centerZ]}
+        position={carvedGeometry ? [0, elevation, 0] : [centerX, elevation - thickness / 2, centerZ]}
+        geometry={carvedGeometry ?? undefined}
         userData={{ keepMaterial: true }}
       >
-        <boxGeometry args={[width, thickness, depth]} />
+        {!carvedGeometry && (
+          <boxGeometry args={[width, thickness, depth]} />
+        )}
         {/* 两种外观各用**独立 key** 的材质元素: three 里"加/去贴图"要重编译着色器,
             而 R3F 对同位置的同类元素会复用同一个 material 实例 (只改 prop),
             不加 key 的话白模切回着色时地面会一直是纯白 —— 贴图进了 shader 但不生效。

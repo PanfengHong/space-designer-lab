@@ -691,7 +691,7 @@ export const modernApartmentScene: SceneData = {
         { id: 'w-el-w', start: [12.5, -2.5], end: [12.5, 0.8], height: 2.8 }, // 西墙
         { id: 'w-el-s', start: [12.5, 0.8], end: [15.5, 0.8], height: 2.8, cutout: { start: 13.5, end: 14.5, sill: 0, top: 2.1 } }, // 南墙 (入户门)
         // 东墙: 南端开门洞, 通向楼梯间
-        { id: 'w-el-e', start: [15.5, -2.5], end: [15.5, 0], height: 2.8, cutout: { start: 2.0, end: 2.5, sill: 0, top: 2.1 } },
+        { id: 'w-el-e', start: [15.5, -2.5], end: [15.5, 0], height: 2.8, cutout: { start: 1.0, end: 2.5, sill: 0, top: 2.1 } },
       ],
       doors: [],
       windows: [],
@@ -704,33 +704,39 @@ export const modernApartmentScene: SceneData = {
       furniture: [],
     },
 
-    // ===== 楼梯间 (玄关东面) x:15.5~18, z:0~3.5 (东移2m) =====
+    // ===== 楼梯间 (玄关东面) x:15.5~18, z:-2.5~3.5 — 北墙与电梯间北墙 (z=-2.5) 齐平 =====
     {
       id: 'stairwell',
       name: '楼梯间',
       nameEn: 'Stairwell',
-      description: '消防楼梯, 西侧门通往玄关。',
+      description: '消防楼梯, 西侧门洞通向电梯间, 梯段向下通往下层。',
       tags: ['三居', '公共'],
       floorHeight: 0,
+      floorMaterial: 'concrete',
       walls: [
-        // 北墙: 西端开门洞, 通向电梯间
-        { id: 'w-st-n', start: [16.5, 0], end: [18, 0], height: 2.8 },
-        // 西墙: 北端开门洞, 通向电梯间东墙
-        { id: 'w-st-w', start: [15.5, 0.5], end: [15.5, 3.5], height: 2.8 },
+        // 北墙: 与电梯间北墙齐平 (同一 z)
+        { id: 'w-st-n', start: [15.5, -2.5], end: [18, -2.5], height: 2.8 },
+        { id: 'w-st-e', start: [18, -2.5], end: [18, 3.5], height: 2.8 }, // 东墙
         { id: 'w-st-s', start: [15.5, 3.5], end: [18, 3.5], height: 2.8 }, // 南墙
-        { id: 'w-st-e', start: [18, 0], end: [18, 3.5], height: 2.8 }, // 东墙
+        // 西墙不列: z -2.5~0 由电梯间东墙 (含门洞) 渲染, z 0~3.5 由玄关东墙渲染;
+        // 自己再列一遍就是两面墙严格重叠共面。轮廓推不出闭合环会退回包围盒, 范围正好正确。
       ],
-      doors: [
-        // 北墙门 (通向电梯间)
-        { id: 'd-st', position: [16, 0, 0], width: 0.9, height: 2.1, rotation: 0, hingeSide: 'left' },
-      ],
-      windows: [
-      ],
+      doors: [],
+      windows: [],
       bayWindows: [],
       frenchWindows: [],
       stairs: [
-        // 直跑楼梯: 从南向北, 10级, 顶部通向电梯间东墙
-        { id: 'st-1', position: [16.75, 0, 3.0], direction: 'north', steps: 10, stepHeight: 0.18, stepDepth: 0.3, width: 1.5 },
+        // 消防楼梯 (下行): 从电梯间东墙门洞 (z -0.5~0) 进来就是顶阶,
+        // 顶阶踏面顶 = startHeight + 9*0.18 + 0.09 + 0.005 = 0 → 与本层地板齐平;
+        // 梯段沿 -Z 向北顶到门中心 (顶阶踏面中心 z=-0.25), 向南下行穿过楼板洞口。
+        {
+          id: 'st-1', position: [16.75, 0, 2.6], direction: 'north',
+          steps: 10, stepHeight: 0.18, stepDepth: 0.3, width: 1.5, startHeight: -1.715,
+        },
+      ],
+      // 楼梯井洞口: 比梯段外沿 (x 16.0~17.5, z -0.41~2.61) 各边放宽 ~3cm, 避免与踏面/立柱严格共面
+      floorOpenings: [
+        { x: 15.97, z: -0.44, w: 1.56, d: 3.07 },
       ],
       furniture: [],
     },
